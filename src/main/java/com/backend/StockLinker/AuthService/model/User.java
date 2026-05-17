@@ -19,7 +19,7 @@ import java.util.Set;
 @NoArgsConstructor
 @SuperBuilder
 @SQLRestriction("account_status != 'BLOCKED'")
-public class User extends BaseEntity{
+public class User extends BaseEntity {
 
     @Column(unique = true, length = 100)
     private String email;
@@ -41,12 +41,15 @@ public class User extends BaseEntity{
 
     @Enumerated(EnumType.STRING)
     @Column(name = "account_status", nullable = false)
+    @Builder.Default
     private AccountStatus accountStatus = AccountStatus.ACTIVE;
 
     @Column(name = "account_locked")
+    @Builder.Default
     private boolean accountLocked = false;
 
     @Column(name = "failed_attempt")
+    @Builder.Default
     private int failedAttempts = 0;
 
     @Column(name = "last_login_at")
@@ -55,6 +58,9 @@ public class User extends BaseEntity{
     @Column(name = "last_login_ip", length = 25)
     private String lastLoginIp;
 
+    @Column(name = "last_login_user_agent", length = 500)
+    private String lastLoginUserAgent;
+
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
             name = "user_role",
@@ -62,8 +68,8 @@ public class User extends BaseEntity{
             inverseJoinColumns = @JoinColumn(name = "role_id"),
             uniqueConstraints = @UniqueConstraint(columnNames = {"user_id", "role_id"})
     )
+    @Builder.Default  // ✅ Important: Use @Builder.Default
     private Set<Role> roles = new HashSet<>();
-
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @Builder.Default
@@ -76,6 +82,10 @@ public class User extends BaseEntity{
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @Builder.Default
     private List<AuditLog> auditLogs = new ArrayList<>();
+
+    // =========================================================
+    // 🔐 ACCOUNT MANAGEMENT METHODS
+    // =========================================================
 
     public void incrementFailedAttempts() {
         this.failedAttempts++;
@@ -93,8 +103,23 @@ public class User extends BaseEntity{
         return this.accountStatus == AccountStatus.ACTIVE && !this.accountLocked;
     }
 
-    public enum AccountStatus{
-        ACTIVE,BLOCKED,BENDING
+    public boolean hasRole(String roleName) {
+        return roles.stream().anyMatch(role -> role.getName().equals(roleName));
+    }
+
+    public boolean hasAnyRole(String... roleNames) {
+        Set<String> roleNameSet = Set.of(roleNames);
+        return roles.stream().anyMatch(role -> roleNameSet.contains(role.getName()));
+    }
+
+    public boolean hasPermission(String permissionName) {
+        return roles.stream()
+                .flatMap(role -> role.getPermissions().stream())
+                .anyMatch(permission -> permission.getName().equals(permissionName));
+    }
+
+    public enum AccountStatus {
+        ACTIVE, BLOCKED, PENDING
     }
 
     public User(String phone) {

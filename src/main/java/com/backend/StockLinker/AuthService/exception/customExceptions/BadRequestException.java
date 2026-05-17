@@ -4,6 +4,11 @@ import com.backend.StockLinker.AuthService.exception.BaseException;
 import com.backend.StockLinker.AuthService.exception.ErrorCode;
 
 public class BadRequestException extends BaseException {
+
+    public BadRequestException() {
+        super(ErrorCode.BAD_REQUEST);
+    }
+
     public BadRequestException(String message) {
         super(ErrorCode.BAD_REQUEST, message);
     }

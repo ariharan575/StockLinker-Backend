@@ -15,7 +15,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Component
@@ -35,52 +36,46 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String token = extractToken(request);
 
             if (token != null && jwtService.validateToken(token)) {
-
                 String tokenType = jwtService.extractTokenType(token);
 
-                // ✅ ONLY ACCESS TOKEN
+                // Only process access tokens
                 if ("access".equals(tokenType)) {
-
                     String userId = jwtService.extractUserId(token);
                     Set<String> roles = jwtService.extractRoles(token);
 
-                    List<SimpleGrantedAuthority> authorities =
-                            roles.stream()
-                                    .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
-                                    .collect(Collectors.toList());
+                    List<SimpleGrantedAuthority> authorities = roles.stream()
+                            .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
+                            .collect(Collectors.toList());
 
-                    // fallback (guest/user safety)
+                    // Fallback for guest users
                     if (authorities.isEmpty()) {
-                        authorities = List.of(new SimpleGrantedAuthority("ROLE_USER"));
+                        authorities = List.of(new SimpleGrantedAuthority("ROLE_GUEST"));
                     }
 
                     UsernamePasswordAuthenticationToken auth =
                             new UsernamePasswordAuthenticationToken(userId, null, authorities);
 
                     SecurityContextHolder.getContext().setAuthentication(auth);
-
-                    log.debug("Authenticated user: {} roles: {}", userId, roles);
+                    log.debug("Authenticated user: {} with roles: {}", userId, roles);
                 }
             }
-
         } catch (ExpiredJwtException e) {
-            log.warn("Token expired");
+            log.warn("Token expired: {}", e.getMessage());
         } catch (Exception e) {
-            log.error("JWT error: {}", e.getMessage());
+            log.error("JWT authentication error: {}", e.getMessage());
         }
 
         filterChain.doFilter(request, response);
     }
 
     private String extractToken(HttpServletRequest request) {
-
-        // 1️⃣ Authorization header
+        // Check Authorization header first
         String header = request.getHeader("Authorization");
         if (header != null && header.startsWith("Bearer ")) {
             return header.substring(7);
         }
 
-        // 2️⃣ Cookie fallback (IMPORTANT for your system)
+        // Check cookie as fallback
         if (request.getCookies() != null) {
             for (Cookie cookie : request.getCookies()) {
                 if ("accessToken".equals(cookie.getName())) {
@@ -96,15 +91,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getServletPath();
 
-        // Exclude only login, refresh, OAuth endpoints from filtering
-        if (path.equals("/api/auth/phone/login") ||
+        // Exclude public endpoints
+        return path.equals("/api/auth/phone/login") ||
                 path.equals("/api/auth/guest/login") ||
                 path.equals("/api/auth/refresh") ||
-                path.startsWith("/oauth2/")) {
-            return true;
-        }
-
-        // All other /api/auth/* endpoints will be filtered (including /me)
-        return false;
+                path.equals("/api/auth/health") ||
+                path.startsWith("/oauth2/") ||
+                path.equals("/api/auth/oauth-success");
     }
 }

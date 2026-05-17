@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 @Builder
 public class DeviceInfoResponse {
     private String id;
+    private String deviceId;
     private String deviceName;
     private String deviceType;
     private String os;
@@ -20,11 +21,15 @@ public class DeviceInfoResponse {
     private boolean trusted;
     private boolean active;
 
+    // =========================================================
+    // 🏗️ FACTORY METHOD - FROM DEVICE
+    // =========================================================
     public static DeviceInfoResponse fromDevice(UserDevice device) {
         if (device == null) return null;
 
         return DeviceInfoResponse.builder()
                 .id(device.getId())
+                .deviceId(device.getDeviceId())
                 .deviceName(device.getDeviceName())
                 .deviceType(device.getDeviceType())
                 .os(device.getOs())

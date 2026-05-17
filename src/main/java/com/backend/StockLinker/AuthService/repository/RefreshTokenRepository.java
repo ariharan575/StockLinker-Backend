@@ -6,20 +6,49 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
-import java.util.List;
 import java.util.Optional;
 
 @Repository
 public interface RefreshTokenRepository extends JpaRepository<RefreshToken, String> {
-    Optional<RefreshToken> findByToken(String token);
-    List<RefreshToken> findByUserIdAndRevokedFalse(String userId);
-    void deleteByExpiryDateBefore(Instant now);
 
+    // =========================================================
+    // 🔍 FIND BY TOKEN ID
+    // =========================================================
     Optional<RefreshToken> findByTokenId(String tokenId);
 
+    // =========================================================
+    // 🔍 FIND BY TOKEN
+    // =========================================================
+    Optional<RefreshToken> findByToken(String token);
+
+    // =========================================================
+    // 🔍 FIND ACTIVE TOKEN BY USER AND DEVICE
+    // =========================================================
+    Optional<RefreshToken> findByUserIdAndDeviceIdAndRevokedFalse(String userId, String deviceId);
+
+    // =========================================================
+    // 🔄 REVOKE ALL USER TOKENS
+    // =========================================================
     @Modifying
+    @Transactional
     @Query("UPDATE RefreshToken rt SET rt.revoked = true WHERE rt.user.id = :userId AND rt.revoked = false")
     void revokeAllUserTokens(@Param("userId") String userId);
+
+    // =========================================================
+    // 🔄 REVOKE SPECIFIC DEVICE TOKENS
+    // =========================================================
+    @Modifying
+    @Transactional
+    @Query("UPDATE RefreshToken rt SET rt.revoked = true WHERE rt.deviceId = :deviceId AND rt.revoked = false")
+    void revokeDeviceTokens(@Param("deviceId") String deviceId);
+
+    // =========================================================
+    // 🗑️ DELETE EXPIRED TOKENS (CLEANUP)
+    // =========================================================
+    @Modifying
+    @Transactional
+    @Query("DELETE FROM RefreshToken rt WHERE rt.expiryDate < CURRENT_TIMESTAMP")
+    int deleteExpiredTokens();
 }

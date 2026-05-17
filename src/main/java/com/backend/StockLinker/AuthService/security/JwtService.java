@@ -6,7 +6,6 @@ import org.springframework.beans.factory.annotation.Value;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import io.jsonwebtoken.security.SignatureException;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -33,18 +32,19 @@ public class JwtService {
     @Value("${jwt.issuer}")
     private String jwtIssuer;
 
-
+    // =========================================================
+    // 🔐 GET SIGNING KEY
+    // =========================================================
     private SecretKey getSigningKey() {
         byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
-    // ✅ ACCESS TOKEN ONLY
-    @Transactional
+    // =========================================================
+    // ✅ GENERATE ACCESS TOKEN
+    // =========================================================
     public String generateAccessToken(User user) {
-
         Map<String, Object> claims = new HashMap<>();
-
         claims.put("type", "access");
         claims.put("userId", user.getId());
         claims.put("email", user.getEmail());
@@ -59,7 +59,7 @@ public class JwtService {
 
         return Jwts.builder()
                 .setClaims(claims)
-                .setSubject(user.getId()) // 🔥 USER ID AS SUBJECT
+                .setSubject(user.getId())
                 .setIssuer(jwtIssuer)
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis() + jwtAccessTokenExpiration))
@@ -67,8 +67,22 @@ public class JwtService {
                 .compact();
     }
 
-    // ================= CLAIMS =================
+    // =========================================================
+    // 🔍 EXTRACT PERMISSIONS FROM USER
+    // =========================================================
+    private Set<String> extractPermissions(User user) {
+        if (user.getRoles() == null) return Collections.emptySet();
 
+        return user.getRoles().stream()
+                .filter(role -> role.getPermissions() != null)
+                .flatMap(role -> role.getPermissions().stream())
+                .map(permission -> permission.getName())
+                .collect(Collectors.toSet());
+    }
+
+    // =========================================================
+    // 📤 EXTRACT ALL CLAIMS
+    // =========================================================
     public Claims extractAllClaims(String token) {
         return Jwts.parserBuilder()
                 .setSigningKey(getSigningKey())
@@ -77,14 +91,23 @@ public class JwtService {
                 .getBody();
     }
 
+    // =========================================================
+    // 🔍 EXTRACT USER ID FROM TOKEN
+    // =========================================================
     public String extractUserId(String token) {
         return extractAllClaims(token).getSubject();
     }
 
+    // =========================================================
+    // 🔍 EXTRACT TOKEN TYPE
+    // =========================================================
     public String extractTokenType(String token) {
         return extractAllClaims(token).get("type", String.class);
     }
 
+    // =========================================================
+    // 🔍 EXTRACT ROLES FROM TOKEN
+    // =========================================================
     public Set<String> extractRoles(String token) {
         Object rolesObj = extractAllClaims(token).get("roles");
 
@@ -98,20 +121,25 @@ public class JwtService {
         return Collections.emptySet();
     }
 
-    // ================= PERMISSIONS =================
+    // =========================================================
+    // 🔍 EXTRACT PERMISSIONS FROM TOKEN
+    // =========================================================
+    public Set<String> extractPermissionsFromToken(String token) {
+        Object permissionsObj = extractAllClaims(token).get("permissions");
 
-    private Set<String> extractPermissions(User user) {
-        if (user.getRoles() == null) return Collections.emptySet();
+        if (permissionsObj instanceof List<?>) {
+            return ((List<?>) permissionsObj)
+                    .stream()
+                    .map(Object::toString)
+                    .collect(Collectors.toSet());
+        }
 
-        return user.getRoles().stream()
-                .filter(role -> role.getPermissions() != null)
-                .flatMap(role -> role.getPermissions().stream())
-                .map(permission -> permission.getName())
-                .collect(Collectors.toSet());
+        return Collections.emptySet();
     }
 
-    // ================= VALIDATION =================
-
+    // =========================================================
+    // ✅ VALIDATE TOKEN
+    // =========================================================
     public boolean validateToken(String token) {
         try {
             extractAllClaims(token);
@@ -130,6 +158,9 @@ public class JwtService {
         return false;
     }
 
+    // =========================================================
+    // ⏰ CHECK IF TOKEN IS EXPIRED
+    // =========================================================
     public boolean isTokenExpired(String token) {
         try {
             return extractAllClaims(token).getExpiration().before(new Date());

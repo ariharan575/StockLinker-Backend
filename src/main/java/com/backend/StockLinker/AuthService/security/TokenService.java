@@ -29,14 +29,13 @@ public class TokenService {
     // =========================================================
     public TokenPair generate(User user, String deviceId, HttpServletResponse response) {
 
-        // 🔐 ACCESS TOKEN
+        // Access token
         String accessToken = jwtService.generateAccessToken(user);
 
-        // 🔐 REFRESH TOKEN (DEVICE LINKED)
-        RefreshToken refreshToken =
-                refreshTokenService.create(user, deviceId);
+        // Refresh token (device linked)
+        RefreshToken refreshToken = refreshTokenService.create(user, deviceId);
 
-        // 🍪 COOKIES
+        // Set cookies
         setAccessCookie(response, accessToken);
         setRefreshCookie(response, refreshToken.getToken());
         setDeviceCookie(response, deviceId);
@@ -45,22 +44,22 @@ public class TokenService {
     }
 
     // =========================================================
-    // 🔄 REFRESH TOKEN FLOW (FIXED)
+    // 🔄 REFRESH TOKEN FLOW
     // =========================================================
     public TokenPair refresh(
             RefreshToken rotatedToken,
             String deviceId,
             HttpServletResponse response
     ) {
-
         User user = rotatedToken.getUser();
 
-        // 🔐 NEW ACCESS TOKEN ONLY
+        // New access token only
         String newAccess = jwtService.generateAccessToken(user);
 
-        // ❗ DO NOT CREATE NEW REFRESH AGAIN (ALREADY ROTATED)
+        // Use the already rotated refresh token
         String newRefresh = rotatedToken.getToken();
 
+        // Update cookies
         setAccessCookie(response, newAccess);
         setRefreshCookie(response, newRefresh);
         setDeviceCookie(response, deviceId);
@@ -72,66 +71,56 @@ public class TokenService {
     // 🚪 CLEAR TOKENS (LOGOUT)
     // =========================================================
     public void clear(HttpServletResponse response) {
-
         deleteCookie(response, "accessToken", "/");
         deleteCookie(response, "refreshToken", "/api/auth/refresh");
-        deleteCookie(response, "deviceId", "/"); // 🔥 IMPORTANT
+        deleteCookie(response, "deviceId", "/");
     }
 
     // =========================================================
     // 🍪 COOKIE METHODS
     // =========================================================
-
     private void setAccessCookie(HttpServletResponse res, String token) {
-
         Cookie cookie = new Cookie("accessToken", token);
         cookie.setHttpOnly(true);
         cookie.setSecure(secure);
         cookie.setPath("/");
-        cookie.setMaxAge(15 * 60); // 15 min
+        cookie.setMaxAge(15 * 60); // 15 minutes
         cookie.setDomain(domain);
-
         res.addCookie(cookie);
     }
 
     private void setRefreshCookie(HttpServletResponse res, String token) {
-
         Cookie cookie = new Cookie("refreshToken", token);
         cookie.setHttpOnly(true);
         cookie.setSecure(secure);
         cookie.setPath("/api/auth/refresh");
         cookie.setMaxAge(7 * 24 * 60 * 60); // 7 days
         cookie.setDomain(domain);
-
         res.addCookie(cookie);
     }
 
     private void setDeviceCookie(HttpServletResponse res, String deviceId) {
-
         Cookie cookie = new Cookie("deviceId", deviceId);
         cookie.setHttpOnly(true);
         cookie.setSecure(secure);
         cookie.setPath("/");
         cookie.setMaxAge(30 * 24 * 60 * 60); // 30 days
         cookie.setDomain(domain);
-
         res.addCookie(cookie);
     }
 
     private void deleteCookie(HttpServletResponse res, String name, String path) {
-
         Cookie cookie = new Cookie(name, "");
         cookie.setHttpOnly(true);
         cookie.setSecure(secure);
         cookie.setPath(path);
         cookie.setMaxAge(0);
         cookie.setDomain(domain);
-
         res.addCookie(cookie);
     }
 
     // =========================================================
-    // DTO
+    // 📦 DTO RECORD
     // =========================================================
     public record TokenPair(String accessToken, String refreshToken) {}
 }

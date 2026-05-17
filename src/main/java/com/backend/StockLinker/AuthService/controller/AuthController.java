@@ -1,6 +1,9 @@
 package com.backend.StockLinker.AuthService.controller;
 
 import com.backend.StockLinker.AuthService.dto.request.PhoneOtpRequest;
+import com.backend.StockLinker.AuthService.dto.response.AuthResponse;
+import com.backend.StockLinker.AuthService.exception.BaseException;
+import com.backend.StockLinker.AuthService.exception.ErrorCode;
 import com.backend.StockLinker.AuthService.model.User;
 import com.backend.StockLinker.AuthService.repository.UserRepository;
 import com.backend.StockLinker.AuthService.service.AuthFlowService;
@@ -8,8 +11,10 @@ import com.backend.StockLinker.AuthService.service.AuthService;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -20,6 +25,7 @@ import java.util.Map;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/auth")
+@Slf4j
 public class AuthController {
 
     private final AuthService authService;
@@ -30,80 +36,107 @@ public class AuthController {
     // 📱 PHONE OTP LOGIN
     // =========================================================
     @PostMapping("/phone/login")
-    public Map<String, Object> phoneLogin(
-            @RequestBody PhoneOtpRequest request,
+    public ResponseEntity<AuthResponse> phoneLogin(
+            @Valid @RequestBody PhoneOtpRequest request,
             @CookieValue(value = "deviceId", required = false) String deviceId,
             HttpServletRequest httpRequest,
             HttpServletResponse response
     ) {
-        return authService.loginWithPhoneOtp(
+        log.info("Phone login attempt with deviceId: {}", deviceId);
+        AuthResponse authResponse = authService.loginWithPhoneOtp(
                 request.getIdToken(),
                 deviceId,
                 httpRequest,
                 response
         );
+        return ResponseEntity.ok(authResponse);
     }
 
     // =========================================================
     // 👤 GUEST LOGIN
     // =========================================================
     @PostMapping("/guest/login")
-    public Map<String, Object> guestLogin(
+    public ResponseEntity<AuthResponse> guestLogin(
             @CookieValue(value = "deviceId", required = false) String deviceId,
             HttpServletRequest request,
             HttpServletResponse response
     ) {
-        return authService.guestLogin(deviceId, request, response);
+        log.info("Guest login attempt with deviceId: {}", deviceId);
+        AuthResponse authResponse = authService.guestLogin(deviceId, request, response);
+        return ResponseEntity.ok(authResponse);
     }
 
     // =========================================================
-    // 🔄 REFRESH TOKEN (DEVICE SAFE)
+    // 🔄 REFRESH TOKEN
     // =========================================================
     @PostMapping("/refresh")
-    public Map<String, Object> refresh(
-            @CookieValue("refreshToken") String refreshToken,
-            @CookieValue("deviceId") String deviceId,
+    public ResponseEntity<AuthResponse> refresh(
+            @CookieValue(value = "refreshToken", required = false) String refreshToken,
+            @CookieValue(value = "deviceId", required = false) String deviceId,
             HttpServletResponse response
     ) {
-        return authFlowService.refresh(refreshToken, deviceId, response);
+        if (refreshToken == null || refreshToken.isBlank()) {
+            throw new BaseException(ErrorCode.INVALID_TOKEN, "Refresh token is required");
+        }
+        if (deviceId == null || deviceId.isBlank()) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Device ID is required");
+        }
+
+        log.info("Token refresh attempt for device: {}", deviceId);
+        AuthResponse authResponse = authFlowService.refresh(refreshToken, deviceId, response);
+        return ResponseEntity.ok(authResponse);
     }
 
     // =========================================================
     // 🚪 LOGOUT (SINGLE DEVICE)
     // =========================================================
     @PostMapping("/logout")
-    public ResponseEntity<?> logout(
-            @CookieValue("refreshToken") String refreshToken,
-            @CookieValue("deviceId") String deviceId,
+    public ResponseEntity<Map<String, String>> logout(
+            @CookieValue(value = "refreshToken", required = false) String refreshToken,
+            @CookieValue(value = "deviceId", required = false) String deviceId,
             HttpServletResponse response
     ) {
+        if (refreshToken == null || refreshToken.isBlank()) {
+            throw new BaseException(ErrorCode.INVALID_TOKEN, "Refresh token is required");
+        }
 
         authFlowService.logout(refreshToken, deviceId, response);
-
-        return ResponseEntity.ok("Logged out successfully");
+        return ResponseEntity.ok(Map.of("message", "Logged out successfully"));
     }
 
     // =========================================================
     // 🚪 LOGOUT ALL DEVICES
     // =========================================================
     @PostMapping("/logout-all")
-    public ResponseEntity<?> logoutAll(Authentication auth) {
+    public ResponseEntity<Map<String, String>> logoutAll(
+            Authentication auth,
+            HttpServletRequest request
+    ) {
+        if (auth == null || !auth.isAuthenticated()) {
+            throw new BaseException(ErrorCode.UNAUTHORIZED);
+        }
 
         String userId = auth.getName();
-
         User user = userRepository.findById(userId)
-                .orElseThrow();
+                .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND));
 
-        authFlowService.logoutAll(user);
-
-        return ResponseEntity.ok("Logged out from all devices");
+        authFlowService.logoutAll(user, request);
+        return ResponseEntity.ok(Map.of("message", "Logged out from all devices successfully"));
     }
 
     // =========================================================
     // 🌐 OAUTH SUCCESS (FRONTEND REDIRECT)
     // =========================================================
     @GetMapping("/oauth-success")
-    public Map<String, String> oauthSuccess(@RequestParam String token) {
-        return Map.of("accessToken", token);
+    public ResponseEntity<Map<String, String>> oauthSuccess(@RequestParam String token) {
+        return ResponseEntity.ok(Map.of("accessToken", token));
+    }
+
+    // =========================================================
+    // ✅ HEALTH CHECK
+    // =========================================================
+    @GetMapping("/health")
+    public ResponseEntity<Map<String, String>> health() {
+        return ResponseEntity.ok(Map.of("status", "UP", "service", "AuthService"));
     }
 }

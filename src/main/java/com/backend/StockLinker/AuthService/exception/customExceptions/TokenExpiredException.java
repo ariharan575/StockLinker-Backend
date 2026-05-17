@@ -4,7 +4,12 @@ import com.backend.StockLinker.AuthService.exception.BaseException;
 import com.backend.StockLinker.AuthService.exception.ErrorCode;
 
 public class TokenExpiredException extends BaseException {
+
     public TokenExpiredException() {
         super(ErrorCode.TOKEN_EXPIRED);
+    }
+
+    public TokenExpiredException(String message) {
+        super(ErrorCode.TOKEN_EXPIRED, message);
     }
 }

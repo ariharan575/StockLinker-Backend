@@ -2,31 +2,59 @@ package com.backend.StockLinker.AuthService.repository;
 
 import com.backend.StockLinker.AuthService.model.User;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 
+@Repository
 public interface UserRepository extends JpaRepository<User, String> {
 
+    // =========================================================
+    // 🔍 FIND BY EMAIL
+    // =========================================================
     Optional<User> findByEmail(String email);
+
+    // =========================================================
+    // 🔍 FIND BY PHONE NUMBER
+    // =========================================================
     Optional<User> findByPhone(String phone);
 
-    @Query("SELECT u FROM User u LEFT JOIN FETCH u.roles WHERE u.email = :email")
-    Optional<User> findByEmailWithRoles(@Param("email") String email);
+    // =========================================================
+    // 🔍 FIND BY UNIQUE ID (OAUTH PROVIDER ID)
+    // =========================================================
+    Optional<User> findByUniqueId(String uniqueId);
 
-    @Query("SELECT DISTINCT u FROM User u LEFT JOIN FETCH u.roles WHERE u.id = :id")
-    Optional<User> findByIdWithRoles(@Param("id") String id);
-
+    // =========================================================
+    // ✅ CHECK IF USER EXISTS BY EMAIL
+    // =========================================================
     boolean existsByEmail(String email);
+
+    // =========================================================
+    // ✅ CHECK IF USER EXISTS BY PHONE
+    // =========================================================
     boolean existsByPhone(String phone);
 
-    @Modifying
-    @Query("UPDATE User u SET u.failedAttempts = :attempts WHERE u.id = :userId")
-    void updateFailedAttempts(@Param("userId") String userId, @Param("attempts") int attempts);
+    // =========================================================
+    // 🔍 FIND USER WITH ROLES (EAGER FETCH)
+    // =========================================================
+    @Query("SELECT DISTINCT u FROM User u LEFT JOIN FETCH u.roles r LEFT JOIN FETCH r.permissions WHERE u.id = :userId")
+    Optional<User> findByIdWithRoles(@Param("userId") String userId);
 
-    @Modifying
-    @Query("UPDATE User u SET u.accountLocked = :locked WHERE u.id = :userId")
-    void updateAccountLocked(@Param("userId") String userId, @Param("locked") boolean locked);
+    // =========================================================
+    // 🔍 FIND USER WITH DEVICES
+    // =========================================================
+    @Query("SELECT DISTINCT u FROM User u LEFT JOIN FETCH u.devices WHERE u.id = :userId")
+    Optional<User> findByIdWithDevices(@Param("userId") String userId);
+
+    // =========================================================
+    // 🔍 FIND USER WITH ALL RELATIONS
+    // =========================================================
+    @Query("SELECT DISTINCT u FROM User u " +
+            "LEFT JOIN FETCH u.roles r " +
+            "LEFT JOIN FETCH r.permissions " +
+            "LEFT JOIN FETCH u.devices d " +
+            "WHERE u.id = :userId")
+    Optional<User> findByIdWithAllRelations(@Param("userId") String userId);
 }

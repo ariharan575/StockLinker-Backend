@@ -1,7 +1,7 @@
 package com.backend.StockLinker.AuthService.security;
 
-import com.backend.StockLinker.AuthService.exception.BaseException;
-import com.backend.StockLinker.AuthService.exception.ErrorCode;
+import com.backend.StockLinker.AuthService.exception.customExceptions.InvalidTokenException;
+import com.backend.StockLinker.AuthService.exception.customExceptions.TokenExpiredException;
 import com.backend.StockLinker.AuthService.model.RefreshToken;
 import com.backend.StockLinker.AuthService.model.User;
 import com.backend.StockLinker.AuthService.repository.RefreshTokenRepository;
@@ -32,9 +32,8 @@ public class RefreshTokenService {
     // =========================================================
     @Transactional
     public RefreshToken create(User user, String deviceId) {
-
-        String tokenId = UUID.randomUUID().toString(); // 🔥 PUBLIC ID
-        String rawToken = UUID.randomUUID().toString(); // 🔐 SECRET
+        String tokenId = UUID.randomUUID().toString();
+        String rawToken = UUID.randomUUID().toString();
         String hashed = BCrypt.hashpw(rawToken, BCrypt.gensalt());
 
         RefreshToken token = RefreshToken.builder()
@@ -47,51 +46,48 @@ public class RefreshTokenService {
                 .build();
 
         repository.save(token);
-
         log.info("Refresh token created for user: {}", user.getId());
 
-        // 🔥 RETURN COMBINED TOKEN (tokenId.rawToken)
+        // Return combined token
         token.setToken(tokenId + "." + rawToken);
-
         return token;
     }
 
     // =========================================================
-    // 🔍 VALIDATE TOKEN (SECURE)
+    // 🔍 VALIDATE TOKEN (USING CUSTOM EXCEPTIONS)
     // =========================================================
     @Transactional(readOnly = true)
     public RefreshToken validate(String fullToken, String deviceId) {
-
         String[] parts = fullToken.split("\\.");
 
         if (parts.length != 2) {
-            throw new BaseException(ErrorCode.INVALID_TOKEN);
+            throw new InvalidTokenException("Invalid token format");
         }
 
         String tokenId = parts[0];
         String rawToken = parts[1];
 
         RefreshToken stored = repository.findByTokenId(tokenId)
-                .orElseThrow(() -> new BaseException(ErrorCode.INVALID_TOKEN));
+                .orElseThrow(() -> new InvalidTokenException("Token not found"));
 
-        // 🔐 CHECK HASH
+        // Check hash
         if (!BCrypt.checkpw(rawToken, stored.getToken())) {
-            throw new BaseException(ErrorCode.INVALID_TOKEN);
+            throw new InvalidTokenException("Token validation failed");
         }
 
-        // 🔒 REVOKED
+        // Check revoked
         if (stored.isRevoked()) {
-            throw new BaseException(ErrorCode.REFRESH_TOKEN_REVOKED);
+            throw new InvalidTokenException("Token has been revoked");
         }
 
-        // ⏳ EXPIRED
+        // Check expired
         if (stored.isExpired()) {
-            throw new BaseException(ErrorCode.TOKEN_EXPIRED);
+            throw new TokenExpiredException("Refresh token has expired");
         }
 
-        // 📱 DEVICE CHECK (STRICT)
+        // Device check
         if (!stored.getDeviceId().equals(deviceId)) {
-            throw new BaseException(ErrorCode.FORBIDDEN, "Device mismatch");
+            throw new InvalidTokenException("Device mismatch");
         }
 
         return stored;
@@ -102,46 +98,39 @@ public class RefreshTokenService {
     // =========================================================
     @Transactional
     public RefreshToken rotate(String oldToken, String deviceId) {
-
         RefreshToken existing = validate(oldToken, deviceId);
 
-        // 🔥 REVOKE OLD
+        // Revoke old token
         existing.setRevoked(true);
 
-        // 🔁 CREATE NEW
+        // Create new token
         RefreshToken newToken = create(existing.getUser(), deviceId);
 
-        // 🔗 LINK CHAIN (OPTIONAL BUT GOOD)
+        // Link the chain
         existing.setReplacedByToken(newToken.getToken());
-
         repository.save(existing);
 
         log.info("Token rotated for user: {}", existing.getUser().getId());
-
         return newToken;
     }
 
     // =========================================================
-    // 🚪 LOGOUT SINGLE DEVICE
+    // 🚪 REVOKE SINGLE DEVICE TOKEN
     // =========================================================
     @Transactional
     public void revoke(String token, String deviceId) {
-
         RefreshToken existing = validate(token, deviceId);
-
         existing.setRevoked(true);
-
         repository.save(existing);
+        log.info("Token revoked for user: {}", existing.getUser().getId());
     }
 
     // =========================================================
-    // 🚪 LOGOUT ALL DEVICES
+    // 🚪 REVOKE ALL USER TOKENS
     // =========================================================
     @Transactional
     public void revokeAll(User user) {
-
         repository.revokeAllUserTokens(user.getId());
-
         log.info("All tokens revoked for user: {}", user.getId());
     }
 }

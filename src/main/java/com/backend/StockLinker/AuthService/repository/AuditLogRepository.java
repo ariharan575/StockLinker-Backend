@@ -13,9 +13,45 @@ import java.util.List;
 
 @Repository
 public interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
-    Page<AuditLog> findByUserId(String userId, Pageable pageable);
-    List<AuditLog> findByCreatedAtBetween(LocalDateTime start, LocalDateTime end);
 
-    @Query("SELECT a FROM AuditLog a WHERE a.action = :action AND a.status = 'FAILURE'")
-    List<AuditLog> findFailedActions(@Param("action") String action);
+    // =========================================================
+    // 🔍 FIND BY USER ID
+    // =========================================================
+    Page<AuditLog> findByUserId(String userId, Pageable pageable);
+
+    // =========================================================
+    // 🔍 FIND BY ACTION
+    // =========================================================
+    Page<AuditLog> findByAction(String action, Pageable pageable);
+
+    // =========================================================
+    // 🔍 FIND BY STATUS
+    // =========================================================
+    Page<AuditLog> findByStatus(AuditLog.Status status, Pageable pageable);
+
+    // =========================================================
+    // 🔍 FIND BY DATE RANGE
+    // =========================================================
+    @Query("SELECT a FROM AuditLog a WHERE a.createdAt BETWEEN :startDate AND :endDate")
+    Page<AuditLog> findByDateRange(@Param("startDate") LocalDateTime startDate,
+                                   @Param("endDate") LocalDateTime endDate,
+                                   Pageable pageable);
+
+    // =========================================================
+    // 🔍 FIND RECENT LOGS FOR USER
+    // =========================================================
+    @Query("SELECT a FROM AuditLog a WHERE a.user.id = :userId ORDER BY a.createdAt DESC")
+    List<AuditLog> findRecentByUserId(@Param("userId") String userId, Pageable pageable);
+
+    // =========================================================
+    // 📊 COUNT BY ACTION
+    // =========================================================
+    @Query("SELECT a.action, COUNT(a) FROM AuditLog a GROUP BY a.action")
+    List<Object[]> countByAction();
+
+    // =========================================================
+    // 📊 COUNT BY STATUS AND DATE
+    // =========================================================
+    @Query("SELECT a.status, COUNT(a) FROM AuditLog a WHERE a.createdAt >= :since GROUP BY a.status")
+    List<Object[]> countByStatusSince(@Param("since") LocalDateTime since);
 }

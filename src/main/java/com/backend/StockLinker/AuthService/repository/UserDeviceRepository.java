@@ -6,22 +6,47 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
 
 @Repository
 public interface UserDeviceRepository extends JpaRepository<UserDevice, String> {
-    List<UserDevice> findByUserId(String userId);
-    Optional<UserDevice> findByUserIdAndDeviceName(String userId, String deviceName);
 
+    // =========================================================
+    // 🔍 FIND BY DEVICE ID
+    // =========================================================
     Optional<UserDevice> findByDeviceId(String deviceId);
 
-    @Modifying
-    @Query("UPDATE UserDevice d SET d.active = false WHERE d.user.id = :userId AND d.id != :currentDeviceId")
-    void deactivateOtherDevices(@Param("userId") String userId, @Param("currentDeviceId") String currentDeviceId);
+    // =========================================================
+    // 🔍 FIND ALL DEVICES FOR USER
+    // =========================================================
+    List<UserDevice> findByUserId(String userId);
 
+    // =========================================================
+    // 🔍 FIND ACTIVE DEVICES FOR USER
+    // =========================================================
+    List<UserDevice> findByUserIdAndActiveTrue(String userId);
+
+    // =========================================================
+    // 🔍 FIND TRUSTED DEVICES FOR USER
+    // =========================================================
+    List<UserDevice> findByUserIdAndTrustedTrue(String userId);
+
+    // =========================================================
+    // 🔄 DEACTIVATE ALL USER DEVICES
+    // =========================================================
     @Modifying
-    @Query("DELETE FROM UserDevice d WHERE d.lastActivityAt < :threshold")
-    void deleteInactiveDevices(@Param("threshold") java.time.LocalDateTime threshold);
+    @Transactional
+    @Query("UPDATE UserDevice d SET d.active = false WHERE d.user.id = :userId")
+    void deactivateAllUserDevices(@Param("userId") String userId);
+
+    // =========================================================
+    // 🔄 UPDATE LAST ACTIVITY
+    // =========================================================
+    @Modifying
+    @Transactional
+    @Query("UPDATE UserDevice d SET d.lastActivityAt = CURRENT_TIMESTAMP, d.ipAddress = :ipAddress WHERE d.deviceId = :deviceId")
+    void updateLastActivity(@Param("deviceId") String deviceId, @Param("ipAddress") String ipAddress);
 }

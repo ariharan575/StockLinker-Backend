@@ -10,7 +10,8 @@ import java.time.LocalDateTime;
 @Table(name = "audit_logs", indexes = {
         @Index(name = "idx_audit_user", columnList = "user_id"),
         @Index(name = "idx_audit_action", columnList = "action"),
-        @Index(name = "idx_audit_created", columnList = "created_at")
+        @Index(name = "idx_audit_created", columnList = "created_at"),
+        @Index(name = "idx_audit_resource", columnList = "resource_type, resource_id")
 })
 @Getter
 @Setter
@@ -23,7 +24,6 @@ public class AuditLog {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // nullable = true (guest login exists)
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     private User user;
@@ -56,6 +56,9 @@ public class AuditLog {
     @Column(name = "failure_reason", length = 255)
     private String failureReason;
 
+    @Column(name = "device_id", length = 100)
+    private String deviceId;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -66,5 +69,12 @@ public class AuditLog {
 
     public enum Status {
         SUCCESS, FAILURE
+    }
+    
+    // =========================================================
+    // 🏷️ RESOURCE TYPE ENUM
+    // =========================================================
+    public enum ResourceType {
+        AUTH, USER, ROLE, PERMISSION, DEVICE, BUSINESS, PRODUCT, ORDER, REVIEW, SYSTEM
     }
 }

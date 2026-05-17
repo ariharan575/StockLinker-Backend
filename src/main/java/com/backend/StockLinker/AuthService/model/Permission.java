@@ -16,7 +16,7 @@ import java.util.Set;
 @SuperBuilder
 @EntityListeners(AuditingEntityListener.class)
 @Table(name = "permissions")
-public class Permission extends BaseEntity{
+public class Permission extends BaseEntity {
 
     @Column(nullable = false, unique = true, length = 100)
     private String name;
@@ -31,5 +31,6 @@ public class Permission extends BaseEntity{
     private String description;
 
     @ManyToMany(mappedBy = "permissions")
+    @Builder.Default  // ✅ Important: Use @Builder.Default
     private Set<Role> roles = new HashSet<>();
 }

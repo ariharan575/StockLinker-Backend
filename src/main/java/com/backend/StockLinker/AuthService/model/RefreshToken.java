@@ -7,7 +7,11 @@ import lombok.experimental.SuperBuilder;
 import java.time.Instant;
 
 @Entity
-@Table(name = "refresh_tokens")
+@Table(name = "refresh_tokens", indexes = {
+        @Index(name = "idx_token_id", columnList = "token_id"),
+        @Index(name = "idx_user_id", columnList = "user_id"),
+        @Index(name = "idx_device_id", columnList = "device_id")
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -18,7 +22,7 @@ public class RefreshToken extends BaseEntity {
     @Column(nullable = false, unique = true, length = 255)
     private String token;
 
-    @Column(name = "token_id", unique = true, nullable = false)
+    @Column(name = "token_id", unique = true, nullable = false, length = 100)
     private String tokenId;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -35,14 +39,31 @@ public class RefreshToken extends BaseEntity {
     @Column(nullable = false)
     private boolean revoked = false;
 
-    @Column(name = "replaced_by_token")
+    @Column(name = "replaced_by_token", length = 255)
     private String replacedByToken;
 
-    @Column(name = "device_id")
-    private String deviceId; // Foreign key to user_devices, but not enforced for simplicity
+    @Column(name = "device_id", length = 100)
+    private String deviceId;
 
+    // =========================================================
+    // 🔍 CHECK IF TOKEN IS EXPIRED
+    // =========================================================
     public boolean isExpired() {
         return Instant.now().isAfter(expiryDate);
     }
+    
+    // =========================================================
+    // 🔄 REVOKE THIS TOKEN
+    // =========================================================
+    public void revoke() {
+        this.revoked = true;
+    }
+    
+    // =========================================================
+    // 🔁 MARK AS REPLACED BY NEW TOKEN
+    // =========================================================
+    public void markAsReplaced(String newToken) {
+        this.revoked = true;
+        this.replacedByToken = newToken;
+    }
 }
-
