@@ -1,6 +1,7 @@
 package com.backend.StockLinker.AuthService.constant;
 
 public enum AuditAction {
+
     // AUTHENTICATION
     LOGIN, 
     LOGIN_FAILED, 

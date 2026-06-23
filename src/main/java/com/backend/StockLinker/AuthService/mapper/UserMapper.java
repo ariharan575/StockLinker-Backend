@@ -9,11 +9,11 @@ import java.util.stream.Collectors;
 @Component
 public class UserMapper {
 
-    // =========================================================
-    // 🔄 USER TO USER INFO RESPONSE
-    // =========================================================
     public UserInfoResponse toUserInfoResponse(User user, boolean isNewUser) {
-        if (user == null) return null;
+
+        if (user == null) {
+            return null;
+        }
 
         return UserInfoResponse.builder()
                 .id(user.getId())
@@ -22,16 +22,32 @@ public class UserMapper {
                 .name(user.getName())
                 .isNewUser(isNewUser)
                 .avatarUrl(user.getAvatarUrl())
-                .accountStatus(user.getAccountStatus() != null ? user.getAccountStatus().name() : null)
+                .accountStatus(
+                        user.getAccountStatus() != null
+                                ? user.getAccountStatus().name()
+                                : null
+                )
                 .accountLocked(user.isAccountLocked())
                 .lastLoginAt(user.getLastLoginAt())
                 .lastLoginIp(user.getLastLoginIp())
-                .roles(user.getRoles().stream().map(role -> role.getName()).collect(Collectors.toSet()))
-                .permissions(user.getRoles().stream()
-                        .flatMap(role -> role.getPermissions().stream())
-                        .map(permission -> permission.getName())
-                        .collect(Collectors.toSet()))
-                .deviceCount(user.getDevices() != null ? user.getDevices().size() : 0)
+                .roles(
+                        user.getRoles()
+                                .stream()
+                                .map(role -> role.getName())
+                                .collect(Collectors.toSet())
+                )
+                .permissions(
+                        user.getRoles()
+                                .stream()
+                                .flatMap(role -> role.getPermissions().stream())
+                                .map(permission -> permission.getName())
+                                .collect(Collectors.toSet())
+                )
+                .deviceCount(
+                        user.getDevices() != null
+                                ? user.getDevices().size()
+                                : 0
+                )
                 .build();
     }
 }

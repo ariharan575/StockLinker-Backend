@@ -10,11 +10,11 @@ import java.util.stream.Collectors;
 @Component
 public class DeviceMapper {
 
-    // =========================================================
-    // 🔄 DEVICE TO DEVICE INFO RESPONSE
-    // =========================================================
     public DeviceInfoResponse toDeviceInfoResponse(UserDevice device) {
-        if (device == null) return null;
+
+        if (device == null) {
+            return null;
+        }
 
         return DeviceInfoResponse.builder()
                 .id(device.getId())
@@ -30,11 +30,14 @@ public class DeviceMapper {
                 .build();
     }
 
-    // =========================================================
-    // 🔄 LIST OF DEVICES TO LIST OF RESPONSES
-    // =========================================================
-    public List<DeviceInfoResponse> toDeviceInfoResponseList(List<UserDevice> devices) {
-        if (devices == null) return List.of();
+    public List<DeviceInfoResponse> toDeviceInfoResponseList(
+            List<UserDevice> devices
+    ) {
+
+        if (devices == null) {
+            return List.of();
+        }
+
         return devices.stream()
                 .map(this::toDeviceInfoResponse)
                 .collect(Collectors.toList());
