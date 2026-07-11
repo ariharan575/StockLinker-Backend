@@ -1,6 +1,5 @@
 package com.backend.StockLinker.AuthService.security;
 
-import com.backend.StockLinker.AuthService.model.Role;
 import com.backend.StockLinker.AuthService.model.User;
 import org.springframework.beans.factory.annotation.Value;
 import io.jsonwebtoken.*;
@@ -17,7 +16,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j
+@Slf4j  
 public class JwtService {
 
     @Value("${jwt.secret}")
@@ -47,15 +46,10 @@ public class JwtService {
         Map<String, Object> claims = new HashMap<>();
         claims.put("type", "access");
         claims.put("userId", user.getId());
-        claims.put("email", user.getEmail());
-        claims.put("phone", user.getPhone());
 
-        Set<String> roleNames = (user.getRoles() != null && !user.getRoles().isEmpty())
-                ? user.getRoles().stream().map(Role::getName).collect(Collectors.toSet())
-                : Collections.emptySet();
+        String roleNames = (user.getRole() != null && !user.getRole().isEmpty()) ? user.getRole() : null;
 
         claims.put("roles", roleNames);
-        claims.put("permissions", extractPermissions(user));
 
         return Jwts.builder()
                 .setClaims(claims)
@@ -70,14 +64,10 @@ public class JwtService {
     // =========================================================
     // 🔍 EXTRACT PERMISSIONS FROM USER
     // =========================================================
-    private Set<String> extractPermissions(User user) {
-        if (user.getRoles() == null) return Collections.emptySet();
+    private String extractPermissions(User user) {
+        if (user.getRole() == null) return null;
 
-        return user.getRoles().stream()
-                .filter(role -> role.getPermissions() != null)
-                .flatMap(role -> role.getPermissions().stream())
-                .map(permission -> permission.getName())
-                .collect(Collectors.toSet());
+        return user.getRole();
     }
 
     // =========================================================

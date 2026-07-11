@@ -127,6 +127,13 @@
 			<artifactId>jackson-databind</artifactId>
 		</dependency>
 
+		<!-- Device Finder -->
+		<dependency>
+			<groupId>nl.basjes.parse.useragent</groupId>
+			<artifactId>yauaa</artifactId>
+			<version>7.28.0</version>
+		</dependency>
+
 		<!-- OpenAPI -->
 		<dependency>
 			<groupId>org.springdoc</groupId>

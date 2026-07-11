@@ -21,16 +21,10 @@ public class Permission extends BaseEntity {
     @Column(nullable = false, unique = true, length = 100)
     private String name;
 
-    @Column(length = 100)
-    private String resource;
-
-    @Column(length = 50)
-    private String action;
-
     @Column(length = 255)
     private String description;
 
     @ManyToMany(mappedBy = "permissions")
-    @Builder.Default  // ✅ Important: Use @Builder.Default
+    @Builder.Default 
     private Set<Role> roles = new HashSet<>();
 }

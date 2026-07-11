@@ -4,7 +4,6 @@ import com.backend.StockLinker.AuthService.dto.response.UserInfoResponse;
 import com.backend.StockLinker.AuthService.model.User;
 import org.springframework.stereotype.Component;
 
-import java.util.stream.Collectors;
 
 @Component
 public class UserMapper {
@@ -27,22 +26,9 @@ public class UserMapper {
                                 ? user.getAccountStatus().name()
                                 : null
                 )
-                .accountLocked(user.isAccountLocked())
                 .lastLoginAt(user.getLastLoginAt())
                 .lastLoginIp(user.getLastLoginIp())
-                .roles(
-                        user.getRoles()
-                                .stream()
-                                .map(role -> role.getName())
-                                .collect(Collectors.toSet())
-                )
-                .permissions(
-                        user.getRoles()
-                                .stream()
-                                .flatMap(role -> role.getPermissions().stream())
-                                .map(permission -> permission.getName())
-                                .collect(Collectors.toSet())
-                )
+                .roles(user.getRole())
                 .deviceCount(
                         user.getDevices() != null
                                 ? user.getDevices().size()

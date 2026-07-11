@@ -1,10 +1,10 @@
 package com.backend.StockLinker.AuthService.model;
 
+import com.backend.StockLinker.AuthService.enums.AuditAction;
+import com.backend.StockLinker.AuthService.enums.ResourceType;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
-
-import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "audit_logs", indexes = {
@@ -13,29 +13,27 @@ import java.time.LocalDateTime;
         @Index(name = "idx_audit_created", columnList = "created_at"),
         @Index(name = "idx_audit_resource", columnList = "resource_type, resource_id")
 })
-@Getter
 @Setter
+@Getter
 @NoArgsConstructor
 @AllArgsConstructor
 @SuperBuilder
-public class AuditLog {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+public class AuditLog extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id")
+    @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(nullable = false, length = 100)
-    private String action;
-
-    @Column(name = "resource_type", length = 50)
-    private String resourceType;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private AuditAction action;
 
     @Column(name = "resource_id", length = 100)
     private String resourceId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "resource_type", nullable = false)
+    private ResourceType resourceType;
 
     @Column(columnDefinition = "TEXT")
     private String oldValue;
@@ -53,28 +51,22 @@ public class AuditLog {
     @Column(nullable = false)
     private Status status;
 
+    @Column(name = "request_uri", length = 255)
+    private String requestUri;
+
+    @Column(name = "http_method", length = 10)
+    private String httpMethod;
+
+    @Column(name = "response_status")
+    private Integer responseStatus;
+
     @Column(name = "failure_reason", length = 255)
     private String failureReason;
 
     @Column(name = "device_id", length = 100)
     private String deviceId;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
-
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-    }
-
     public enum Status {
         SUCCESS, FAILURE
-    }
-    
-    // =========================================================
-    // 🏷️ RESOURCE TYPE ENUM
-    // =========================================================
-    public enum ResourceType {
-        AUTH, USER, ROLE, PERMISSION, DEVICE, BUSINESS, PRODUCT, ORDER, REVIEW, SYSTEM
     }
 }

@@ -5,8 +5,6 @@ import lombok.Builder;
 import lombok.Data;
 
 import java.time.LocalDateTime;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 @Data
 @Builder
@@ -18,11 +16,9 @@ public class UserInfoResponse {
     private boolean isNewUser;
     private String avatarUrl;
     private String accountStatus;
-    private boolean accountLocked;
     private LocalDateTime lastLoginAt;
     private String lastLoginIp;
-    private Set<String> roles;
-    private Set<String> permissions;
+    private String roles;
     private int deviceCount;
 
     // =========================================================
@@ -37,14 +33,9 @@ public class UserInfoResponse {
                 .isNewUser(isNewUser)
                 .avatarUrl(user.getAvatarUrl())
                 .accountStatus(user.getAccountStatus().name())
-                .accountLocked(user.isAccountLocked())
                 .lastLoginAt(user.getLastLoginAt())
                 .lastLoginIp(user.getLastLoginIp())
-                .roles(user.getRoles().stream().map(role -> role.getName()).collect(Collectors.toSet()))
-                .permissions(user.getRoles().stream()
-                        .flatMap(role -> role.getPermissions().stream())
-                        .map(perm -> perm.getName())
-                        .collect(Collectors.toSet()))
+                .roles(user.getRole())
                 .deviceCount(user.getDevices() != null ? user.getDevices().size() : 0)
                 .build();
     }

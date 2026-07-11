@@ -1,9 +1,7 @@
 package com.backend.StockLinker.AuthService.security;
 
 import com.backend.StockLinker.AuthService.dto.response.AuthResponse;
-import com.backend.StockLinker.AuthService.model.User;
-import com.backend.StockLinker.AuthService.repository.UserRepository;
-import com.backend.StockLinker.AuthService.service.AuthFlowService;
+import com.backend.StockLinker.AuthService.service.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -21,8 +19,8 @@ import java.util.UUID;
 @Slf4j
 public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
 
-    private final UserRepository userRepository;
-    private final AuthFlowService authFlowService;
+    // Inject AuthService directly instead of UserRepository and AuthFlowService
+    private final AuthService authService;
 
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request,
@@ -31,7 +29,6 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
 
         OAuth2User oauthUser = (OAuth2User) authentication.getPrincipal();
 
-        // Extract Google data
         String email = oauthUser.getAttribute("email");
         String name = oauthUser.getAttribute("name");
         String picture = oauthUser.getAttribute("picture");
@@ -39,45 +36,28 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
 
         log.info("OAuth2 login success for email: {}", email);
 
-        // Find or create user
-        User user = userRepository.findByEmail(email)
-                .orElseGet(() -> {
-                    User u = new User();
-                    u.setEmail(email);
-                    u.setName(name);
-                    u.setAvatarUrl(picture);
-                    u.setProvider("GOOGLE");
-                    u.setUniqueId(googleId);
-                    return userRepository.save(u);
-                });
-
-        // Get device ID from cookie or generate new
         String deviceId = getDeviceIdFromCookie(request);
         if (deviceId == null || deviceId.isBlank()) {
             deviceId = generateDeviceId(request);
         }
 
-        // Process login through auth flow
-        AuthResponse authResponse = authFlowService.login(
-                user,
-                "GOOGLE",
+        // Delegate entire creation and flow processing to the unified AuthService
+        AuthResponse authResponse = authService.loginWithGoogle(
+                email,
+                name,
+                picture,
+                googleId,
                 deviceId,
                 request,
                 response
         );
 
-        // Build redirect URL with all parameters
+        // Build redirect URL matching strict enterprise DTO contract
         String redirectUrl = String.format(
-                "http://localhost:5173/oauth-success?token=%s&refreshToken=%s&userId=%s&isNewUser=%s&needsRoleSelection=%s&hasBusinessRole=%s",
-                authResponse.getAccessToken(),
-                authResponse.getRefreshToken(),
-                authResponse.getUserId(),
-                authResponse.isNewUser(),
-                authResponse.isNeedsRoleSelection(),
-                authResponse.isHasBusinessRole()
+                "http://localhost:5173/oauth-success?token=%s&refreshToken=%s&userId=%s&role=%s&accountStatus=%s&nextStep=%s"
         );
 
-        log.info("Redirecting to: {}", redirectUrl);
+        log.info("OAuth processing complete. Redirecting frontend to correct pipeline stage.");
         response.sendRedirect(redirectUrl);
     }
 

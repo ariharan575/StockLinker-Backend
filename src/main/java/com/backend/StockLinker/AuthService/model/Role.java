@@ -30,10 +30,6 @@ public class Role extends BaseEntity {
             joinColumns = @JoinColumn(name = "role_id"),
             inverseJoinColumns = @JoinColumn(name = "permission_id")
     )
-    @Builder.Default  // ✅ Important: Use @Builder.Default
+    @Builder.Default 
     private Set<Permission> permissions = new HashSet<>();
-
-    @ManyToMany(mappedBy = "roles")
-    @Builder.Default  // ✅ Important: Use @Builder.Default
-    private Set<User> users = new HashSet<>();
 }

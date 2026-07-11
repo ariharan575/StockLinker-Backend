@@ -15,7 +15,7 @@ import java.time.LocalDateTime;
 public abstract class BaseEntity {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(columnDefinition = "CHAR(36)", updatable = false, nullable = false)
     private String id;
 

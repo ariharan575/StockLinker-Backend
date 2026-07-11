@@ -40,26 +40,6 @@ public class GlobalExceptionHandler {
     }
 
     // =========================================================
-    // ✅ ACCOUNT BLOCKED EXCEPTION
-    // =========================================================
-    @ExceptionHandler(AccountBlockedException.class)
-    public ResponseEntity<ApiError> handleAccountBlocked(
-            AccountBlockedException ex,
-            HttpServletRequest request
-    ) {
-        log.warn("Account blocked: {}", ex.getMessage());
-
-        ApiError error = new ApiError(
-                HttpStatus.FORBIDDEN.value(),
-                "ACCOUNT_BLOCKED",
-                ex.getMessage(),
-                request.getRequestURI()
-        );
-
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
-    }
-
-    // =========================================================
     // ✅ BAD REQUEST EXCEPTION
     // =========================================================
     @ExceptionHandler(BadRequestException.class)

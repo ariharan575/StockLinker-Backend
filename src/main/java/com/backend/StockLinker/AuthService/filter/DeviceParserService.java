@@ -1,76 +1,72 @@
 package com.backend.StockLinker.AuthService.filter;
 
+import nl.basjes.parse.useragent.UserAgent;
+import nl.basjes.parse.useragent.UserAgentAnalyzer;
 import org.springframework.stereotype.Service;
+
+import java.util.Optional;
 
 @Service
 public class DeviceParserService {
 
-    public DeviceDetails parse(String userAgent) {
+    private final UserAgentAnalyzer analyzer;
 
-        if (userAgent == null || userAgent.isBlank()) {
+    public DeviceParserService() {
+        this.analyzer = UserAgentAnalyzer.newBuilder()
+                .hideMatcherLoadStats()
+                .withCache(10000)
+                .build();
+    }
+
+    public DeviceDetails parse(String userAgentString) {
+        if (userAgentString == null || userAgentString.isBlank()) {
             return defaultDevice();
         }
 
-        String ua = userAgent.toLowerCase();
+        UserAgent agent = analyzer.parse(userAgentString);
 
-        String os = detectOS(ua);
-        String browser = detectBrowser(ua);
-        String type = detectType(ua);
-        String name = buildName(os, browser);
-
-        return new DeviceDetails(name, type, os, browser);
+        return new DeviceDetails(
+                extractValue(agent, UserAgent.DEVICE_NAME, "Unknown Device"),
+                extractValue(agent, UserAgent.DEVICE_CLASS, "UNKNOWN"),
+                extractValue(agent, UserAgent.OPERATING_SYSTEM_NAME, "Unknown"),
+                extractValue(agent, UserAgent.OPERATING_SYSTEM_VERSION, "Unknown"),
+                extractValue(agent, UserAgent.AGENT_NAME, "Unknown"),
+                extractValue(agent, UserAgent.AGENT_VERSION, "Unknown"),
+                extractValue(agent, UserAgent.DEVICE_BRAND, "Unknown"),
+                extractValue(agent, UserAgent.DEVICE_NAME, "Unknown"),
+                extractValue(agent, "DeviceCpu", "Unknown") // YAUAA fallback for architecture
+        );
     }
 
-    // ================= OS =================
-    private String detectOS(String ua) {
-
-        if (ua.contains("android")) return "Android";
-        if (ua.contains("iphone") || ua.contains("ipad")) return "iOS";
-        if (ua.contains("windows")) return "Windows";
-        if (ua.contains("mac os") || ua.contains("macintosh")) return "MacOS";
-        if (ua.contains("linux")) return "Linux";
-
-        return "Unknown";
-    }
-
-    // ================= BROWSER =================
-    private String detectBrowser(String ua) {
-
-        if (ua.contains("chrome") && !ua.contains("edg")) return "Chrome";
-        if (ua.contains("firefox")) return "Firefox";
-        if (ua.contains("safari") && !ua.contains("chrome")) return "Safari";
-        if (ua.contains("edg")) return "Edge";
-
-        return "Unknown";
-    }
-
-    // ================= TYPE =================
-    private String detectType(String ua) {
-
-        if (ua.contains("mobile")) return "MOBILE";
-        if (ua.contains("tablet") || ua.contains("ipad")) return "TABLET";
-
-        return "DESKTOP";
-    }
-
-    // ================= NAME =================
-    private String buildName(String os, String browser) {
-
-        if ("Unknown".equals(os) && "Unknown".equals(browser)) {
-            return "Generic Device";
-        }
-
-        return os + " - " + browser;
+    private String extractValue(UserAgent agent, String fieldName, String fallback) {
+        return Optional.ofNullable(agent.getValue(fieldName))
+                .filter(val -> !val.equalsIgnoreCase("Unknown"))
+                .orElse(fallback);
     }
 
     private DeviceDetails defaultDevice() {
-        return new DeviceDetails("Generic Device", "UNKNOWN", "Unknown", "Unknown");
+        return new DeviceDetails(
+                "Generic Device",
+                "UNKNOWN",
+                "Unknown",
+                "Unknown",
+                "Unknown",
+                "Unknown",
+                "Unknown",
+                "Unknown",
+                "Unknown"
+        );
     }
 
     public record DeviceDetails(
             String deviceName,
             String deviceType,
             String os,
-            String browser
+            String osVersion,
+            String browser,
+            String browserVersion,
+            String manufacturer,
+            String model,
+            String architecture
     ) {}
 }

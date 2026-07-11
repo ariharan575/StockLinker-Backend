@@ -132,11 +132,4 @@ public class AuthController {
         return ResponseEntity.ok(Map.of("accessToken", token));
     }
 
-    // =========================================================
-    // ✅ HEALTH CHECK
-    // =========================================================
-    @GetMapping("/health")
-    public ResponseEntity<Map<String, String>> health() {
-        return ResponseEntity.ok(Map.of("status", "UP", "service", "AuthService"));
-    }
 }
