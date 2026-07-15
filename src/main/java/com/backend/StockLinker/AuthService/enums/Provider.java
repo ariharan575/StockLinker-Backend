@@ -1,5 +1,5 @@
 package com.backend.StockLinker.AuthService.enums;
 
-public enum LoginProvider {
+public enum Provider {
     GOOGLE, PHONE_OTP, GUEST
 }

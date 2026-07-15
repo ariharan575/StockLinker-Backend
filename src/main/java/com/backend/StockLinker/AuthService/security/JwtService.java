@@ -1,22 +1,22 @@
 package com.backend.StockLinker.AuthService.security;
 
 import com.backend.StockLinker.AuthService.model.User;
-import org.springframework.beans.factory.annotation.Value;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import io.jsonwebtoken.security.SignatureException;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j  
+@Slf4j
 public class JwtService {
 
     @Value("${jwt.secret}")
@@ -25,34 +25,64 @@ public class JwtService {
     @Value("${jwt.access-token-expiration}")
     private long jwtAccessTokenExpiration;
 
-    @Value("${jwt.refresh-token-expiration}")
-    private long jwtRefreshTokenExpiration;
-
     @Value("${jwt.issuer}")
     private String jwtIssuer;
 
-    // =========================================================
-    // 🔐 GET SIGNING KEY
-    // =========================================================
-    private SecretKey getSigningKey() {
+    private SecretKey cachedSigningKey;
+
+    private JwtParser jwtParser;
+
+    private static final String CLAIM_TYPE = "type";
+    private static final String CLAIM_DEVICE_ID = "deviceId";
+    private static final String CLAIM_AUTHORITIES = "authorities";
+
+
+    @PostConstruct
+    public void init() {
+
         byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
-        return Keys.hmacShaKeyFor(keyBytes);
+
+        this.cachedSigningKey = Keys.hmacShaKeyFor(keyBytes);
+
+        this.jwtParser = Jwts.parserBuilder()
+                .setSigningKey(this.cachedSigningKey)
+                .setAllowedClockSkewSeconds(60)
+                .requireIssuer(this.jwtIssuer)
+                .build();
+
+        log.info("JwtService initialized with cached SecretKey and optimized JwtParser.");
     }
 
-    // =========================================================
-    // ✅ GENERATE ACCESS TOKEN
-    // =========================================================
-    public String generateAccessToken(User user) {
+    private SecretKey getSigningKey() {
+        return this.cachedSigningKey;
+    }
+
+    public String generateAccessToken(User user, String deviceId) {
+
+        if (user == null || user.getId() == null) {
+            throw new IllegalArgumentException("Cannot generate token for a null user or missing user ID");
+        }
+
         Map<String, Object> claims = new HashMap<>();
-        claims.put("type", "access");
-        claims.put("userId", user.getId());
 
-        String roleNames = (user.getRole() != null && !user.getRole().isEmpty()) ? user.getRole() : null;
+        claims.put(CLAIM_TYPE, "access");
+        claims.put(CLAIM_DEVICE_ID, deviceId);
 
-        claims.put("roles", roleNames);
+        // Map Roles and Permissions directly into the JWT payload for stateless authentication
+        List<String> authorities = new ArrayList<>();
+        if (user.getRole() != null) {
+            authorities.add("ROLE_" + user.getRole().getName());
+            if (user.getRole().getPermissions() != null) {
+                user.getRole().getPermissions().forEach(permission ->
+                        authorities.add(permission.getName())
+                );
+            }
+        }
+        claims.put(CLAIM_AUTHORITIES, authorities);
 
         return Jwts.builder()
                 .setClaims(claims)
+                .setId(UUID.randomUUID().toString())
                 .setSubject(user.getId())
                 .setIssuer(jwtIssuer)
                 .setIssuedAt(new Date())
@@ -61,101 +91,29 @@ public class JwtService {
                 .compact();
     }
 
-    // =========================================================
-    // 🔍 EXTRACT PERMISSIONS FROM USER
-    // =========================================================
-    private String extractPermissions(User user) {
-        if (user.getRole() == null) return null;
-
-        return user.getRole();
-    }
-
-    // =========================================================
-    // 📤 EXTRACT ALL CLAIMS
-    // =========================================================
     public Claims extractAllClaims(String token) {
-        return Jwts.parserBuilder()
-                .setSigningKey(getSigningKey())
-                .build()
-                .parseClaimsJws(token)
-                .getBody();
+        return jwtParser.parseClaimsJws(token).getBody();
     }
 
-    // =========================================================
-    // 🔍 EXTRACT USER ID FROM TOKEN
-    // =========================================================
-    public String extractUserId(String token) {
-        return extractAllClaims(token).getSubject();
-    }
-
-    // =========================================================
-    // 🔍 EXTRACT TOKEN TYPE
-    // =========================================================
-    public String extractTokenType(String token) {
-        return extractAllClaims(token).get("type", String.class);
-    }
-
-    // =========================================================
-    // 🔍 EXTRACT ROLES FROM TOKEN
-    // =========================================================
-    public Set<String> extractRoles(String token) {
-        Object rolesObj = extractAllClaims(token).get("roles");
-
-        if (rolesObj instanceof List<?>) {
-            return ((List<?>) rolesObj)
-                    .stream()
-                    .map(Object::toString)
-                    .collect(Collectors.toSet());
-        }
-
-        return Collections.emptySet();
-    }
-
-    // =========================================================
-    // 🔍 EXTRACT PERMISSIONS FROM TOKEN
-    // =========================================================
-    public Set<String> extractPermissionsFromToken(String token) {
-        Object permissionsObj = extractAllClaims(token).get("permissions");
-
-        if (permissionsObj instanceof List<?>) {
-            return ((List<?>) permissionsObj)
-                    .stream()
-                    .map(Object::toString)
-                    .collect(Collectors.toSet());
-        }
-
-        return Collections.emptySet();
-    }
-
-    // =========================================================
-    // ✅ VALIDATE TOKEN
-    // =========================================================
     public boolean validateToken(String token) {
+
+        if (token == null || token.isBlank()) {
+            return false;
+        }
         try {
             extractAllClaims(token);
             return true;
         } catch (ExpiredJwtException e) {
-            log.warn("JWT expired: {}", e.getMessage());
+            log.debug("JWT expired: {}", e.getMessage());
         } catch (UnsupportedJwtException e) {
-            log.warn("Unsupported JWT: {}", e.getMessage());
+            log.debug("Unsupported JWT: {}", e.getMessage());
         } catch (MalformedJwtException e) {
-            log.warn("Malformed JWT: {}", e.getMessage());
+            log.debug("Malformed JWT: {}", e.getMessage());
         } catch (SignatureException e) {
-            log.warn("Invalid signature: {}", e.getMessage());
+            log.debug("Invalid signature: {}", e.getMessage());
         } catch (IllegalArgumentException e) {
-            log.warn("Empty claims: {}", e.getMessage());
+            log.debug("Empty claims: {}", e.getMessage());
         }
         return false;
-    }
-
-    // =========================================================
-    // ⏰ CHECK IF TOKEN IS EXPIRED
-    // =========================================================
-    public boolean isTokenExpired(String token) {
-        try {
-            return extractAllClaims(token).getExpiration().before(new Date());
-        } catch (ExpiredJwtException e) {
-            return true;
-        }
     }
 }

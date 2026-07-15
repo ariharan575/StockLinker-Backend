@@ -3,26 +3,42 @@ package com.backend.StockLinker.AuthService.model;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
+import org.hibernate.annotations.DynamicUpdate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
+import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.List;
 
 @Entity
-@Table(name = "user_devices")
+@Table(
+        name = "user_devices",
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uk_user_device", columnNames = {"user_id", "device_id"})
+        },
+        indexes = {
+                @Index(name = "idx_user_device", columnList = "user_id, device_id"),
+                @Index(name = "idx_device_active", columnList = "is_active")
+        }
+)
+@DynamicUpdate
 @Getter
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
 @SuperBuilder
 @EntityListeners(AuditingEntityListener.class)
-public class UserDevice extends BaseEntity {
+@ToString(exclude = {"user", "tokens"})
+@EqualsAndHashCode(callSuper = true, exclude = {"user", "tokens"})
+public class UserDevice extends BaseEntity implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
+    @JoinColumn(name = "user_id", nullable = false, columnDefinition = "VARCHAR(36)")
     private User user;
 
-    @Column(name = "device_id", nullable = false, unique = true)
+    @Column(name = "device_id", length = 100)
     private String deviceId;
 
     @Column(name = "device_name", length = 255)
@@ -83,14 +99,13 @@ public class UserDevice extends BaseEntity {
     private LocalDateTime lastActivityAt;
 
     @Column(name = "is_trusted", nullable = false)
-    @Builder.Default
     private boolean trusted = false;
 
     @Column(name = "is_active", nullable = false)
-    @Builder.Default
     private boolean active = true;
 
     @Transient
-    @Builder.Default
-    private boolean currentDevice = false;
+    private boolean currentDevice = true;
 }
+
+

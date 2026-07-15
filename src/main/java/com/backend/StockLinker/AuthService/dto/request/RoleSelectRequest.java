@@ -7,8 +7,10 @@ import lombok.Data;
 @Data
 public class RoleSelectRequest {
 
-    @NotBlank(message = "Role is required")
-    @Pattern(regexp = "^(SHOPKEEPER|WHOLESALER)$",
-            message = "Role must be either SHOPKEEPER or WHOLESALER")
+    @NotBlank(message = "Role selection is required")
+    @Pattern(
+            regexp = "^(SHOPKEEPER|WHOLESALER)$",
+            message = "Invalid role. Allowed roles: SHOPKEEPER, WHOLESALER"
+    )
     private String role;
 }

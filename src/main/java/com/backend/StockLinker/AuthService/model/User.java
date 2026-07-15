@@ -1,5 +1,7 @@
 package com.backend.StockLinker.AuthService.model;
 
+import com.backend.StockLinker.AuthService.enums.Provider;
+import com.backend.StockLinker.AuthService.enums.RoleConstants;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
@@ -18,7 +20,6 @@ import java.util.List;
 @AllArgsConstructor
 @NoArgsConstructor
 @SuperBuilder
-@SQLRestriction("account_status != 'BLOCKED'")
 public class User extends BaseEntity {
 
     @Column(unique = true, length = 100)
@@ -37,7 +38,8 @@ public class User extends BaseEntity {
     private String uniqueId;
 
     @Column(name = "provider", length = 50)
-    private String provider;
+    @Enumerated(EnumType.STRING)
+    private Provider provider;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "account_status", nullable = false)
@@ -54,13 +56,8 @@ public class User extends BaseEntity {
     private String lastLoginUserAgent;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinTable(
-            name = "user_role",
-            joinColumns = @JoinColumn(name = "user_id"),
-            inverseJoinColumns = @JoinColumn(name = "role_id"),
-            uniqueConstraints = @UniqueConstraint(columnNames = {"user_id", "role_id"})
-    )
-    private String role;
+    @JoinColumn(name = "role_id", columnDefinition = "VARCHAR(36)")
+    private Role  role;
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @Builder.Default

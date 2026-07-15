@@ -11,6 +11,18 @@ public class DeviceParserService {
 
     private final UserAgentAnalyzer analyzer;
 
+    private static final DeviceDetails DEFAULT_DEVICE = new DeviceDetails(
+            "Generic Device",
+            "UNKNOWN",
+            "Unknown",
+            "Unknown",
+            "Unknown",
+            "Unknown",
+            "Unknown",
+            "Unknown",
+            "Unknown"
+    );
+
     public DeviceParserService() {
         this.analyzer = UserAgentAnalyzer.newBuilder()
                 .hideMatcherLoadStats()
@@ -20,7 +32,7 @@ public class DeviceParserService {
 
     public DeviceDetails parse(String userAgentString) {
         if (userAgentString == null || userAgentString.isBlank()) {
-            return defaultDevice();
+            return DEFAULT_DEVICE;
         }
 
         UserAgent agent = analyzer.parse(userAgentString);
@@ -42,20 +54,6 @@ public class DeviceParserService {
         return Optional.ofNullable(agent.getValue(fieldName))
                 .filter(val -> !val.equalsIgnoreCase("Unknown"))
                 .orElse(fallback);
-    }
-
-    private DeviceDetails defaultDevice() {
-        return new DeviceDetails(
-                "Generic Device",
-                "UNKNOWN",
-                "Unknown",
-                "Unknown",
-                "Unknown",
-                "Unknown",
-                "Unknown",
-                "Unknown",
-                "Unknown"
-        );
     }
 
     public record DeviceDetails(

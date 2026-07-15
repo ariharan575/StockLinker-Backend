@@ -5,10 +5,6 @@ import com.backend.StockLinker.AuthService.exception.ErrorCode;
 
 public class InvalidTokenException extends BaseException {
 
-    public InvalidTokenException() {
-        super(ErrorCode.INVALID_TOKEN);
-    }
-
     public InvalidTokenException(String message) {
         super(ErrorCode.INVALID_TOKEN, message);
     }

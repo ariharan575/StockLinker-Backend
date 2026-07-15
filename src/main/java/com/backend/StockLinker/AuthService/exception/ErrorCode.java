@@ -33,6 +33,7 @@ public enum ErrorCode {
 
     // Role & Permission
     ROLE_NOT_FOUND(HttpStatus.NOT_FOUND, "Role not found"),
+
     PERMISSION_NOT_FOUND(HttpStatus.NOT_FOUND, "Permission not found"),
     INSUFFICIENT_PERMISSIONS(HttpStatus.FORBIDDEN, "Insufficient permissions"),
     ROLE_ALREADY_ASSIGNED(HttpStatus.CONFLICT, "Role already assigned to user"),

@@ -3,6 +3,7 @@ package com.backend.StockLinker.AuthService.dto.request;
 import com.backend.StockLinker.AuthService.enums.AuditAction;
 import com.backend.StockLinker.AuthService.enums.ResourceType;
 import com.backend.StockLinker.AuthService.model.AuditLog;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -17,7 +18,7 @@ import lombok.Setter;
 @AllArgsConstructor
 public class AuditLogRequest {
 
-    @NotNull(message = "User is required for audit logging")
+    @NotBlank(message = "User ID is required for audit logging")
     private String userId;
 
     @NotNull(message = "Audit action is required")

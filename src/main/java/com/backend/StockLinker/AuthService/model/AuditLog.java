@@ -9,6 +9,8 @@ import lombok.experimental.SuperBuilder;
 @Entity
 @Table(name = "audit_logs", indexes = {
         @Index(name = "idx_audit_user", columnList = "user_id"),
+        @Index(name = "idx_audit_device_id", columnList = "device_id"),
+        @Index(name = "idx_audit_status" , columnList = "status"),
         @Index(name = "idx_audit_action", columnList = "action"),
         @Index(name = "idx_audit_created", columnList = "created_at"),
         @Index(name = "idx_audit_resource", columnList = "resource_type, resource_id")
@@ -18,10 +20,11 @@ import lombok.experimental.SuperBuilder;
 @NoArgsConstructor
 @AllArgsConstructor
 @SuperBuilder
+@ToString(exclude = "user")
 public class AuditLog extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
+    @JoinColumn(name = "user_id", columnDefinition = "VARCHAR(36)")
     private User user;
 
     @Enumerated(EnumType.STRING)

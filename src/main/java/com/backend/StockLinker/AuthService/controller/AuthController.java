@@ -1,135 +1,156 @@
 package com.backend.StockLinker.AuthService.controller;
 
 import com.backend.StockLinker.AuthService.dto.request.PhoneOtpRequest;
+import com.backend.StockLinker.AuthService.dto.request.RoleSelectRequest;
 import com.backend.StockLinker.AuthService.dto.response.AuthResponse;
 import com.backend.StockLinker.AuthService.exception.BaseException;
 import com.backend.StockLinker.AuthService.exception.ErrorCode;
-import com.backend.StockLinker.AuthService.model.User;
-import com.backend.StockLinker.AuthService.repository.UserRepository;
-import com.backend.StockLinker.AuthService.service.AuthFlowService;
+import com.backend.StockLinker.AuthService.exception.ValidationException;
 import com.backend.StockLinker.AuthService.service.AuthService;
-
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
-@RequiredArgsConstructor
 @RequestMapping("/api/auth")
+@RequiredArgsConstructor
 @Slf4j
 public class AuthController {
 
     private final AuthService authService;
-    private final AuthFlowService authFlowService;
-    private final UserRepository userRepository;
 
-    // =========================================================
-    // 📱 PHONE OTP LOGIN
-    // =========================================================
     @PostMapping("/phone/login")
     public ResponseEntity<AuthResponse> phoneLogin(
-            @Valid @RequestBody PhoneOtpRequest request,
-            @CookieValue(value = "deviceId", required = false) String deviceId,
-            HttpServletRequest httpRequest,
-            HttpServletResponse response
-    ) {
-        log.info("Phone login attempt with deviceId: {}", deviceId);
-        AuthResponse authResponse = authService.loginWithPhoneOtp(
-                request.getIdToken(),
-                deviceId,
-                httpRequest,
-                response
-        );
-        return ResponseEntity.ok(authResponse);
-    }
-
-    // =========================================================
-    // 👤 GUEST LOGIN
-    // =========================================================
-    @PostMapping("/guest/login")
-    public ResponseEntity<AuthResponse> guestLogin(
-            @CookieValue(value = "deviceId", required = false) String deviceId,
+            @Valid @RequestBody PhoneOtpRequest requestDto,
+            BindingResult bindingResult,
             HttpServletRequest request,
             HttpServletResponse response
     ) {
-        log.info("Guest login attempt with deviceId: {}", deviceId);
-        AuthResponse authResponse = authService.guestLogin(deviceId, request, response);
-        return ResponseEntity.ok(authResponse);
+        if (bindingResult.hasErrors()) {
+            String errors = bindingResult.getFieldErrors().stream()
+                    .map(e -> e.getField() + ": " + e.getDefaultMessage())
+                    .collect(Collectors.joining("; "));
+            throw new ValidationException(errors);
+        }
+
+        String deviceId = (String) request.getAttribute("deviceId");
+        log.info("the device id is created: {}" , deviceId);
+        log.debug("Phone login attempt for device: {}", deviceId);
+
+        return ResponseEntity.ok(authService.phoneLogin(requestDto.getIdToken(), deviceId, request, response));
     }
 
-    // =========================================================
-    // 🔄 REFRESH TOKEN
-    // =========================================================
+    @PostMapping("/guest/login")
+    public ResponseEntity<AuthResponse> guestLogin(
+            HttpServletRequest request,
+            HttpServletResponse response
+    ) {
+        String deviceId = (String) request.getAttribute("deviceId");
+
+        if (deviceId == null || deviceId.isBlank()) {
+            log.warn("Guest login attempt without device ID");
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Device ID is required for guest login");
+        }
+
+        log.debug("Guest login attempt for device: {}", deviceId);
+        return ResponseEntity.ok(authService.guestLogin(deviceId, request, response));
+    }
+
+    @PostMapping("/role/select")
+    public ResponseEntity<AuthResponse> selectRole(
+            @Valid @RequestBody RoleSelectRequest requestDto,
+            BindingResult bindingResult,
+            Authentication authentication,
+            HttpServletRequest request,
+            HttpServletResponse response
+    ) {
+        if (bindingResult.hasErrors()) {
+            String errors = bindingResult.getFieldErrors().stream()
+                    .map(e -> e.getField() + ": " + e.getDefaultMessage())
+                    .collect(Collectors.joining("; "));
+            throw new ValidationException(errors);
+        }
+
+        if (authentication == null || !authentication.isAuthenticated()) {
+            log.warn("Role selection attempted without authentication");
+            throw new BaseException(ErrorCode.UNAUTHORIZED, "You must be authenticated to select a role");
+        }
+
+        String userId = authentication.getName();
+        String deviceId = (String) request.getAttribute("deviceId");
+
+        log.debug("Role selection for user {}: {}", userId, requestDto.getRole());
+
+        return ResponseEntity.ok(authService.selectRole(userId, requestDto.getRole(), deviceId, request, response));
+    }
+
     @PostMapping("/refresh")
     public ResponseEntity<AuthResponse> refresh(
-            @CookieValue(value = "refreshToken", required = false) String refreshToken,
-            @CookieValue(value = "deviceId", required = false) String deviceId,
+            @CookieValue(name = "refreshToken", required = false) String refreshToken,
+            HttpServletRequest request,
             HttpServletResponse response
     ) {
         if (refreshToken == null || refreshToken.isBlank()) {
-            throw new BaseException(ErrorCode.INVALID_TOKEN, "Refresh token is required");
-        }
-        if (deviceId == null || deviceId.isBlank()) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Device ID is required");
+            log.warn("Refresh attempt without refresh token");
+            throw new BaseException(ErrorCode.UNAUTHORIZED, "Refresh token is missing");
         }
 
-        log.info("Token refresh attempt for device: {}", deviceId);
-        AuthResponse authResponse = authFlowService.refresh(refreshToken, deviceId, response);
-        return ResponseEntity.ok(authResponse);
+        String deviceId = (String) request.getAttribute("deviceId");
+        log.debug("Token refresh attempt for device: {}", deviceId);
+
+        return ResponseEntity.ok(authService.refresh(refreshToken, deviceId, response));
     }
 
-    // =========================================================
-    // 🚪 LOGOUT (SINGLE DEVICE)
-    // =========================================================
     @PostMapping("/logout")
     public ResponseEntity<Map<String, String>> logout(
-            @CookieValue(value = "refreshToken", required = false) String refreshToken,
-            @CookieValue(value = "deviceId", required = false) String deviceId,
+            @CookieValue(name = "refreshToken", required = false) String refreshToken,
+            HttpServletRequest request,
             HttpServletResponse response
     ) {
         if (refreshToken == null || refreshToken.isBlank()) {
-            throw new BaseException(ErrorCode.INVALID_TOKEN, "Refresh token is required");
+            log.warn("Logout attempt without refresh token");
+            throw new BaseException(ErrorCode.UNAUTHORIZED, "Refresh token is required for logout");
         }
 
-        authFlowService.logout(refreshToken, deviceId, response);
-        return ResponseEntity.ok(Map.of("message", "Logged out successfully"));
+        String deviceId = (String) request.getAttribute("deviceId");
+        authService.logout(refreshToken, deviceId, request, response);
+
+        log.debug("Logout successful for device: {}", deviceId);
+        return ResponseEntity.ok(Map.of(
+                "message", "Logged out successfully",
+                "status", "success"
+        ));
     }
 
-    // =========================================================
-    // 🚪 LOGOUT ALL DEVICES
-    // =========================================================
     @PostMapping("/logout-all")
     public ResponseEntity<Map<String, String>> logoutAll(
-            Authentication auth,
-            HttpServletRequest request
+            Authentication authentication,
+            HttpServletRequest request,
+            HttpServletResponse response
     ) {
-        if (auth == null || !auth.isAuthenticated()) {
-            throw new BaseException(ErrorCode.UNAUTHORIZED);
+        if (authentication == null || !authentication.isAuthenticated()) {
+            log.warn("Global logout attempted without authentication");
+            throw new BaseException(ErrorCode.UNAUTHORIZED, "You must be authenticated for global logout");
         }
 
-        String userId = auth.getName();
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND));
+        String userId = authentication.getName();
+        String deviceId = (String) request.getAttribute("deviceId");
 
-        authFlowService.logoutAll(user, request);
-        return ResponseEntity.ok(Map.of("message", "Logged out from all devices successfully"));
+        authService.logoutAll(userId, deviceId, request, response);
+
+        log.debug("Global logout successful for user: {}", userId);
+        return ResponseEntity.ok(Map.of(
+                "message", "Global logout successful",
+                "status", "success"
+        ));
     }
-
-    // =========================================================
-    // 🌐 OAUTH SUCCESS (FRONTEND REDIRECT)
-    // =========================================================
-    @GetMapping("/oauth-success")
-    public ResponseEntity<Map<String, String>> oauthSuccess(@RequestParam String token) {
-        return ResponseEntity.ok(Map.of("accessToken", token));
-    }
-
 }

@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.annotation.Validated;
 
@@ -24,7 +25,7 @@ public class AuditService {
     private final UserRepository userRepository;
 
     @Async
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void log(@Valid AuditLogRequest request) {
 
         if (request == null) {
@@ -37,30 +38,26 @@ public class AuditService {
             repository.save(auditLog);
 
             if (log.isDebugEnabled()) {
-                String userId = (request.getUserId() != null)
-                        ? request.getUserId()
-                        : "anonymous";
-
                 log.debug(
                         "Audit log saved successfully: action={}, userId={}, resourceType={}, status={}",
                         request.getAction(),
-                        userId,
+                        request.getUserId(),
                         request.getResourceType(),
                         request.getStatus()
                 );
             }
         } catch (Exception e) {
-            String userId = ( request.getUserId() != null)
+            String userId = (request != null && request.getUserId() != null)
                     ? request.getUserId()
                     : "anonymous";
 
             log.error(
                     "Audit log persistence failed: action={}, userId={}, resourceType={}, resourceId={}, status={}, error={}",
-                    request.getAction(),
+                    (request != null ? request.getAction() : "UNKNOWN"),
                     userId,
-                    request.getResourceType(),
-                    request.getResourceId(),
-                    request.getStatus(),
+                    (request != null ? request.getResourceType() : "UNKNOWN"),
+                    (request != null ? request.getResourceId() : "UNKNOWN"),
+                    (request != null ? request.getStatus() : "UNKNOWN"),
                     e.getMessage(),
                     e
             );
@@ -69,7 +66,8 @@ public class AuditService {
 
     private AuditLog buildAuditLog(AuditLogRequest request) {
 
-        User user = userRepository.getReferenceById(request.getUserId());
+        // getReferenceById creates a lazy proxy without hitting the database
+        User user = userRepository.findById(request.getUserId()).orElse(null);
 
         return AuditLog.builder()
                 .user(user)
