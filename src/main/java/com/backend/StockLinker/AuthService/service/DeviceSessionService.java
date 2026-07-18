@@ -9,6 +9,7 @@ import com.backend.StockLinker.AuthService.filter.DeviceParserService;
 import com.backend.StockLinker.AuthService.model.AuditLog;
 import com.backend.StockLinker.AuthService.model.User;
 import com.backend.StockLinker.AuthService.model.UserDevice;
+import com.backend.StockLinker.AuthService.repository.RefreshTokenRepository;
 import com.backend.StockLinker.AuthService.repository.UserDeviceRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -33,6 +34,7 @@ public class DeviceSessionService {
     private final DeviceParserService parser;
     private final AuditService auditService;
     private final IpAddressService ipAddressService;
+    private final RefreshTokenRepository refreshTokenRepository;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -48,8 +50,23 @@ public class DeviceSessionService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Device ID is required for device registration");
         }
 
-        UserDevice device = userDeviceRepository.findByUserIdAndDeviceId(user.getId(), deviceId)
-                .map(existing -> updateExistingDevice(existing, request, user.getId()))
+// In DeviceSessionService.java -> getOrCreate()
+// Note: You will need to inject RefreshTokenRepository into this service.
+        UserDevice device = userDeviceRepository
+                .findByDeviceId(deviceId)
+                .map(existing -> {
+                    // Device belongs to another user
+                    if (!existing.getUser().getId().equals(user.getId())) {
+                        log.warn("Device {} reassigned from user {} to {}. Revoking old tokens.",
+                                deviceId, existing.getUser().getId(), user.getId());
+
+                        // Security Fix: Revoke old user's tokens on this specific device
+                        refreshTokenRepository.revokeAllTokensForDevice(deviceId);
+
+                        existing.setUser(user);
+                    }
+                    return updateExistingDevice(existing, request, user.getId());
+                })
                 .orElseGet(() -> createNewDevice(user, deviceId, request));
 
         // Force flush to ensure device is persisted

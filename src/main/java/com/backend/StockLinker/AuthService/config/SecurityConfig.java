@@ -50,8 +50,6 @@ public class SecurityConfig {
                         .successHandler(successHandler)
                 )
 
-                // Enforce execution order: Device Fingerprint -> JWT Auth -> Default
-
                 .addFilterBefore(
                         deviceFingerprintFilter,
                         SecurityContextHolderFilter.class

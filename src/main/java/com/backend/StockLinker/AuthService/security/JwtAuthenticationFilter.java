@@ -78,7 +78,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         SecurityContextHolder.clearContext();
                         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                         response.setContentType("application/json");
-                        response.getWriter().write("{\"error\": \"Unauthorized - Device mismatch\"}");
+                        String errorJson = String.format(
+                                "{\"status\": 401, \"error\": \"UNAUTHORIZED\", \"message\": \"Unauthorized - Device mismatch\", \"path\": \"%s\"}",
+                                request.getRequestURI()
+                        );
+                        response.getWriter().write(errorJson);
                         return;
                     }
 

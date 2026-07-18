@@ -28,11 +28,11 @@ public class RefreshToken extends BaseEntity {
     private String tokenId;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false, columnDefinition = "VARCHAR(36)")
+    @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "device_fk", columnDefinition = "VARCHAR(36)")
+    @JoinColumn(name = "device_fk")
     private UserDevice device;
 
     @Column(name = "device_id", length = 100, nullable = false)

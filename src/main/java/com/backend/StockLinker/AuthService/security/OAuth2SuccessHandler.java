@@ -25,7 +25,7 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
 
     private final AuthService authService;
 
-    @Value("${oauth2.redirect.success-url:http://localhost:5173/oauth-success}")
+    @Value("${app.frontend.url}/oauth-success")
     private String oauthSuccessRedirectUrl;
 
     @Override
@@ -48,7 +48,6 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
 
             // If still null, generate a new one
             if (deviceId == null || deviceId.isBlank()) {
-                log.warn("Device ID is missing from request. Generating new device ID.");
                 log.debug("Generated fallback device ID: {}", deviceId);
                 throw new IllegalStateException("DeviceId missing");
             }

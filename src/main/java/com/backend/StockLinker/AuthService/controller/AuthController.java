@@ -43,7 +43,6 @@ public class AuthController {
         }
 
         String deviceId = (String) request.getAttribute("deviceId");
-        log.info("the device id is created: {}" , deviceId);
         log.debug("Phone login attempt for device: {}", deviceId);
 
         return ResponseEntity.ok(authService.phoneLogin(requestDto.getIdToken(), deviceId, request, response));

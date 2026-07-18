@@ -56,7 +56,7 @@ public class User extends BaseEntity {
     private String lastLoginUserAgent;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "role_id", columnDefinition = "VARCHAR(36)")
+    @JoinColumn(name = "role_id")
     private Role  role;
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)

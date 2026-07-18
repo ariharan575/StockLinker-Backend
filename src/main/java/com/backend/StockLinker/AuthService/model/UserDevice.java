@@ -35,10 +35,10 @@ public class UserDevice extends BaseEntity implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false, columnDefinition = "VARCHAR(36)")
+    @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(name = "device_id", length = 100)
+    @Column(name = "device_id", nullable = false, unique = true, length = 255)
     private String deviceId;
 
     @Column(name = "device_name", length = 255)
@@ -107,5 +107,3 @@ public class UserDevice extends BaseEntity implements Serializable {
     @Transient
     private boolean currentDevice = true;
 }
-
-

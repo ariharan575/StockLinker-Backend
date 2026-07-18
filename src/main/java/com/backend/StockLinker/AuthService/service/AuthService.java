@@ -181,13 +181,23 @@ public class AuthService {
                     log.info("Existing guest found: {}", existingUser.getId());
                     return authFlowService.processLogin(existingUser, Provider.GUEST.name(), deviceId, request, response);
                 } else {
-                    // ✅ FIX: Device belongs to a non-guest user - create new guest with new device ID
                     log.warn("Device belongs to non-guest user {}. Creating new guest with new device ID.", existingUser.getId());
                     // Generate new deviceId for guest
                     deviceId = UUID.randomUUID().toString();
                     if (request != null) {
                         request.setAttribute("deviceId", deviceId);
                     }
+
+                    // --- NEW CODE: Force frontend to update the device cookie ---
+                    org.springframework.http.ResponseCookie deviceCookie = org.springframework.http.ResponseCookie.from("deviceId", deviceId)
+                            .httpOnly(true)
+                            .secure(request != null && request.isSecure())
+                            .path("/")
+                            .maxAge(java.time.Duration.ofDays(365))
+                            .sameSite("Lax")
+                            .build();
+                    response.addHeader(org.springframework.http.HttpHeaders.SET_COOKIE, deviceCookie.toString());
+                    // ------------------------------------------------------------
                 }
             }
 
@@ -222,8 +232,6 @@ public class AuthService {
 
             return authFlowService.processLogin(guest, Provider.GUEST.name(), deviceId, request, response);
 
-        } catch (BaseException e) {
-            throw e;
         } catch (Exception e) {
             log.error("Guest login failed: {}", e.getMessage(), e);
             auditService.log(AuditLogRequest.builder()

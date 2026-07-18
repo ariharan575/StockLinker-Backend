@@ -18,9 +18,10 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Stri
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<RefreshToken> findByTokenId(String tokenId);
 
+    // FIX: Method name, @Param name, and query parameter now ALL match "userId"
     @Modifying
     @Transactional
     @Query("UPDATE RefreshToken rt SET rt.revoked = true WHERE rt.user.id = :userId AND rt.revoked = false")
-    void revokeAllUserTokens(@Param("userId") String userId);
+    void revokeAllTokensForDevice(@Param("userId") String userId);
 
 }

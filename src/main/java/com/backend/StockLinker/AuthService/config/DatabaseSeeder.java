@@ -1,4 +1,4 @@
-package com.backend.StockLinker.AuthService;
+package com.backend.StockLinker.AuthService.config;
 
 import com.backend.StockLinker.AuthService.model.Permission;
 import com.backend.StockLinker.AuthService.model.Role;

@@ -13,5 +13,4 @@ public interface UserDeviceRepository extends JpaRepository<UserDevice, String> 
 
     // Added for cross-account device collision protection
     Optional<UserDevice> findByDeviceId(String deviceId);
-
 }
