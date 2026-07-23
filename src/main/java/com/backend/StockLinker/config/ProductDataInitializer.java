@@ -1,4 +1,4 @@
-package com.backend.StockLinker.AuthService.config;
+package com.backend.StockLinker.config;
 
 import com.backend.StockLinker.ProfileService.model.ProductCategory;
 import com.backend.StockLinker.ProfileService.model.ProductSubCategory;
@@ -33,8 +33,8 @@ public class ProductDataInitializer implements CommandLineRunner {
     @Override
     @Transactional
     public void run(String... args) throws Exception {
-        // We expect exactly 11 categories as per the new frontend synchronization.
-        if (productCategoryRepository.count() == 11) {
+        // We expect exactly 12 categories as per the new frontend synchronization.
+        if (productCategoryRepository.count() == 12) {
             logger.info("Already Initialized. Product categories match frontend configuration. Skipping.");
             return;
         }
@@ -43,7 +43,7 @@ public class ProductDataInitializer implements CommandLineRunner {
 
         // Completely remove old data to ensure 100% synchronization without merging
         if (productCategoryRepository.count() > 0 || productSubCategoryRepository.count() > 0) {
-            logger.info("Removing old deprecated categories (Grocery/FMCG)...");
+            logger.info("Removing old deprecated categories...");
             productSubCategoryRepository.deleteAll();
             productCategoryRepository.deleteAll();
         }
@@ -54,64 +54,51 @@ public class ProductDataInitializer implements CommandLineRunner {
         List<CategoryDef> definitions = Arrays.asList(
                 new CategoryDef("Electronics", "FiCpu", Arrays.asList(
                         "Televisions", "Home Theater Systems", "Digital Cameras", "Drones & Accessories",
-                        "Action Cameras", "Bluetooth Speakers", "Wireless Earbuds", "Power Banks",
-                        "Smart Watches", "VR Headsets", "Set-Top Boxes", "Projectors",
-                        "Car Electronics", "Surveillance Cameras"
+                        "Bluetooth Speakers", "Wireless Earbuds", "Smart Watches", "Projectors"
                 )),
                 new CategoryDef("Grocery & Gourmet", "FiShoppingCart", Arrays.asList(
                         "Rice & Grains", "Pulses & Lentils", "Edible Oils", "Spices & Masalas",
-                        "Tea & Coffee", "Packaged Snacks", "Dry Fruits & Nuts", "Bakery Ingredients",
-                        "Sauces & Condiments", "Breakfast Cereals", "Frozen Foods", "Organic Foods",
-                        "Beverages & Juices", "Sweeteners", "Canned & Preserved Foods"
+                        "Tea & Coffee", "Packaged Snacks", "Dry Fruits & Nuts", "Beverages & Juices"
                 )),
                 new CategoryDef("Home Appliances", "FiHome", Arrays.asList(
                         "Refrigerators", "Washing Machines", "Air Conditioners", "Microwave Ovens",
-                        "Water Purifiers", "Vacuum Cleaners", "Air Fryers", "Mixer Grinders",
-                        "Ceiling Fans", "Room Heaters", "Water Heaters", "Induction Cooktops",
-                        "Dishwashers", "Air Coolers", "Chimneys & Hoods"
+                        "Water Purifiers", "Vacuum Cleaners", "Mixer Grinders", "Room Heaters"
                 )),
                 new CategoryDef("Furniture & Decor", "FiBox", Arrays.asList(
                         "Sofas & Recliners", "Dining Sets", "Office Chairs", "Office Desks",
-                        "Wardrobes", "Bookshelves", "Bed Frames", "Mattresses",
-                        "Coffee Tables", "TV Units", "Wall Art & Decor", "Curtains & Blinds",
-                        "Rugs & Carpets", "Storage Cabinets", "Outdoor Furniture"
+                        "Wardrobes", "Bed Frames", "Mattresses", "Storage Cabinets"
                 )),
                 new CategoryDef("Agriculture", "FiSun", Arrays.asList(
                         "Seeds & Saplings", "Fertilizers", "Pesticides", "Irrigation Equipment",
-                        "Tractors & Implements", "Greenhouse Supplies", "Farm Tools", "Poultry Equipment",
-                        "Animal Feed", "Harvesting Machinery", "Sprayers & Dusters", "Solar Water Pumps",
-                        "Beekeeping Supplies", "Soil Testing Kits"
+                        "Farm Tools", "Poultry Equipment", "Animal Feed", "Solar Water Pumps"
                 )),
                 new CategoryDef("Healthcare & Medical", "FiHeart", Arrays.asList(
-                        "First Aid Supplies", "Mobility Aids", "Surgical Instruments",
-                        "Personal Protective", "Hospital Furniture", "Health Monitors",
-                        "Orthopedic Supports", "Respiratory Equipment", "Dental Supplies",
-                        "Ayurvedic Products", "Nutritional Supplements"
+                        "First Aid Supplies", "Mobility Aids", "Surgical Instruments", "Hospital Furniture",
+                        "Health Monitors", "Orthopedic Supports", "Dental Supplies", "Nutritional Supplements"
                 )),
                 new CategoryDef("Beauty & Personal Care", "FiDroplet", Arrays.asList(
                         "Skincare", "Haircare", "Makeup & Cosmetics", "Fragrances & Perfumes",
-                        "Grooming Tools", "Bath & Body", "Nail Care",
-                        "Men's Grooming", "Organic & Herbal Care", "Beauty Tools & Accessories"
+                        "Bath & Body", "Men's Grooming", "Organic & Herbal Care", "Beauty Tools"
                 )),
                 new CategoryDef("Construction & Building", "FiTool", Arrays.asList(
                         "Cement & Concrete", "Bricks & Blocks", "Steel & TMT Bars", "Tiles & Sanitaryware",
-                        "Doors & Windows", "Roofing Materials", "Plywood & Boards", "Waterproofing Solutions",
-                        "Scaffolding Equipment", "Construction Tools", "Paints & Finishes", "Pipes & Fittings"
+                        "Doors & Windows", "Roofing Materials", "Plywood & Boards", "Pipes & Fittings"
                 )),
                 new CategoryDef("Electrical & Lighting", "FiZap", Arrays.asList(
                         "LED Lights", "Wires & Cables", "Switches & Sockets", "MCBs & Distribution Boards",
-                        "Solar Panels", "Inverters & UPS", "Transformers", "Lighting Fixtures",
-                        "Smart Home Devices", "Industrial Lighting", "Street Lighting"
+                        "Solar Panels", "Inverters & UPS", "Transformers", "Smart Home Devices"
                 )),
                 new CategoryDef("Books & Stationery", "FiBook", Arrays.asList(
                         "Textbooks", "Notebooks & Diaries", "Art & Craft Supplies", "Office Stationery",
-                        "Children's Books", "Religious & Spiritual Books", "Calendars & Planners",
-                        "Gift Wrapping Supplies", "Filing Supplies"
+                        "Children's Books", "Religious Books", "Calendars & Planners", "Filing Supplies"
                 )),
                 new CategoryDef("Mobile & Accessories", "FiSmartphone", Arrays.asList(
                         "Smartphones", "Mobile Cases & Covers", "Screen Protectors", "Chargers & Cables",
-                        "Power Banks", "Bluetooth Headsets", "Mobile Repair Parts", "Phone Holders & Mounts",
-                        "Selfie Sticks & Tripods", "SIM Accessories"
+                        "Power Banks", "Bluetooth Headsets", "Mobile Repair Parts", "Selfie Sticks & Tripods"
+                )),
+                new CategoryDef("Sports & Fitness", "FiActivity", Arrays.asList(
+                        "Gym Equipment", "Yoga Accessories", "Team Sports", "Racquet Sports",
+                        "Cycling", "Swimming Gear", "Athletic Wear", "Camping & Hiking"
                 ))
         );
 
@@ -119,7 +106,7 @@ public class ProductDataInitializer implements CommandLineRunner {
         // 2. INSERT PRODUCT CATEGORIES
         // ==========================================
         List<ProductCategory> categoriesToSave = new ArrayList<>();
-        Set<String> categorySlugs = new HashSet<>(); // Guard against duplicate slugs
+        Set<String> categorySlugs = new HashSet<>();
 
         for (CategoryDef def : definitions) {
             categoriesToSave.add(createCategory(def.name, def.icon, categorySlugs));
@@ -132,10 +119,9 @@ public class ProductDataInitializer implements CommandLineRunner {
         // 3. INSERT PRODUCT SUB CATEGORIES
         // ==========================================
         List<ProductSubCategory> subCategoriesToSave = new ArrayList<>();
-        Set<String> subCategorySlugs = new HashSet<>(); // Ensures global subcategory slug uniqueness
+        Set<String> subCategorySlugs = new HashSet<>();
 
         for (ProductCategory savedCategory : savedCategories) {
-            // Find corresponding definition
             CategoryDef matchingDef = definitions.stream()
                     .filter(d -> d.name.equals(savedCategory.getName()))
                     .findFirst()
@@ -182,7 +168,6 @@ public class ProductDataInitializer implements CommandLineRunner {
     }
 
     private String generateSlug(String name) {
-        // Removes ampersands, normalizes spaces/special chars, formats to lowercase kebab-case
         return name.toLowerCase()
                 .replaceAll("&", "")
                 .replaceAll("[^a-z0-9\\s-]", "")
@@ -207,7 +192,6 @@ public class ProductDataInitializer implements CommandLineRunner {
         return generateSlug(name) + ".png";
     }
 
-    // Static nested class to keep definitions clean and manageable
     private static class CategoryDef {
         String name;
         String icon;

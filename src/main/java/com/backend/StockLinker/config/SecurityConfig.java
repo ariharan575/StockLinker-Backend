@@ -1,4 +1,4 @@
-package com.backend.StockLinker.AuthService.config;
+package com.backend.StockLinker.config;
 
 import com.backend.StockLinker.AuthService.filter.DeviceFingerprintFilter;
 import com.backend.StockLinker.AuthService.security.JwtAuthenticationFilter;
@@ -42,6 +42,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/login/oauth2/**").permitAll()
                         .requestMatchers("/oauth2/**").permitAll()
+                        .requestMatchers("/ws/**").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .anyRequest().authenticated()
                 )

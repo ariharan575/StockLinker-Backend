@@ -44,5 +44,4 @@ public class BusinessAddress extends BaseEntity {
 
     @Column(name = "landmark", length = 150)
     private String landmark;
-
 }

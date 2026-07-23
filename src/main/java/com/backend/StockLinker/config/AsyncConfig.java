@@ -1,4 +1,4 @@
-package com.backend.StockLinker.AuthService.config;
+package com.backend.StockLinker.config;
 
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;

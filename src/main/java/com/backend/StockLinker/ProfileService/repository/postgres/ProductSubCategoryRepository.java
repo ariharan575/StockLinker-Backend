@@ -9,4 +9,5 @@ import java.util.List;
 @Repository
 public interface ProductSubCategoryRepository extends JpaRepository<ProductSubCategory, String> {
     List<ProductSubCategory> findByProductCategoryId(String categoryId);
+    List<ProductSubCategory> findByProductCategoryIdIn(List<String> categoryIds);
 }

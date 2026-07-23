@@ -9,4 +9,5 @@ import java.util.List;
 @Repository
 public interface MasterProductRepository extends JpaRepository<MasterProduct, String> {
     List<MasterProduct> findByProductSubCategoryId(String subCategoryId);
+    List<MasterProduct> findTop10ByProductNameContainingIgnoreCase(String productName);
 }

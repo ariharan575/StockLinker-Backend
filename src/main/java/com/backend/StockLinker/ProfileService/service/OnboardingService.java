@@ -18,8 +18,10 @@ import com.backend.StockLinker.ProfileService.dto.request.MarketplaceInfoRequest
 import com.backend.StockLinker.ProfileService.dto.response.CategoryResponseDto;
 import com.backend.StockLinker.ProfileService.model.BusinessProfile;
 import com.backend.StockLinker.ProfileService.model.BusinessAddress;
+import com.backend.StockLinker.ProfileService.model.DeliveryConfiguration;
 import com.backend.StockLinker.ProfileService.repository.postgres.BusinessProfileRepository;
 import com.backend.StockLinker.ProfileService.repository.postgres.BusinessAddressRepository;
+import com.backend.StockLinker.ProfileService.repository.postgres.DeliveryConfigurationRepository;
 import com.backend.StockLinker.ProfileService.repository.postgres.ProductCategoryRepository;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -42,6 +44,7 @@ public class OnboardingService {
     private final BusinessProfileRepository businessProfileRepository;
     private final BusinessAddressRepository businessAddressRepository;
     private final ProductCategoryRepository productCategoryRepository;
+    private final DeliveryConfigurationRepository deliveryRepository;
     private final AuditService auditService;
     private final IpAddressService ipAddressService;
 
@@ -78,17 +81,34 @@ public class OnboardingService {
                     p.setStatus("ONBOARDING");
                     p.setBusinessType(roleName);
                     p.setDeliverySupported(false);
+                    p.setVerificationStatus("PENDING");
+                    p.setTrustScore(0);
+                    p.setMarketplaceRank(0);
+                    p.setRating(0.0);
+                    p.setReviewCount(0);
                     return p;
                 });
 
         profile.setOwnerName(dto.getOwnerName());
         profile.setBusinessName(dto.getBusinessName());
         profile.setMobileNumber(dto.getMobile());
-        profile.setWhatsappNumber(dto.getAlternateMobile());
         profile.setBusinessEmail(dto.getBusinessEmail());
         profile.setGstNumber(dto.getGstNumber());
 
         profile = businessProfileRepository.save(profile);
+
+        final BusinessProfile savedProfile = profile;
+
+        // 🚀 Save Delivery Radius in Step 1
+        DeliveryConfiguration delivery = deliveryRepository.findByBusinessProfileId(savedProfile.getId())
+                .orElseGet(() -> {
+                    DeliveryConfiguration d = new DeliveryConfiguration();
+                    d.setBusinessProfile(savedProfile); // Use the final copy here
+                    return d;
+                });
+        delivery.setCoverageRadiusKm(dto.getDeliveryRadius());
+        deliveryRepository.save(delivery);
+
         logAudit(user.getId(), AuditAction.ONBOARDING_STARTED, profile.getId(), request);
     }
 
@@ -105,11 +125,12 @@ public class OnboardingService {
                     return a;
                 });
 
-        address.setStreet(dto.getAddressLine1());
-        address.setArea(dto.getAddressLine2());
-        address.setCity(dto.getCity());
+        address.setAddress(dto.getAddressLine1());
+        address.setAlternate_address(dto.getAddressLine2());
+        address.setArea(dto.getArea());
+        address.setCity(dto.getCityOrTown());
         address.setDistrict(dto.getDistrict());
-        address.setState(dto.getState());
+        address.setState("Tamil Nadu"); // Force Tamil Nadu automatically
         address.setPincode(dto.getPincode());
 
         businessAddressRepository.save(address);
@@ -122,15 +143,15 @@ public class OnboardingService {
         BusinessProfile profile = businessProfileRepository.findByUserId(user.getId())
                 .orElseThrow(() -> new BaseException(ErrorCode.BAD_REQUEST, "Please complete previous steps first."));
 
-        // --- Store IDs as comma separated string inside the business table (e.g. "id1,id2,id3") ---
         if (dto.getCategoryIds() != null && !dto.getCategoryIds().isEmpty()) {
             String joinedIds = String.join(",", dto.getCategoryIds());
             profile.setCategoryIds(joinedIds);
         }
 
         profile.setDeliverySupported(dto.getDeliveryAvailable() != null ? dto.getDeliveryAvailable() : false);
-        profile.setStoreSize(dto.getStoreSize() != null ? dto.getStoreSize().name() : null);
+        profile.setStoreSize(dto.getStoreSize() != null ? dto.getStoreSize() : null);
         profile.setStatus("ACTIVE");
+        profile.setVerificationStatus("VERIFIED");
 
         businessProfileRepository.save(profile);
 

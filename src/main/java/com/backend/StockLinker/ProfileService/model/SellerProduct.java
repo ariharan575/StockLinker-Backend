@@ -55,6 +55,12 @@ public class SellerProduct extends BaseEntity {
     @Column(name = "minimum_order_quantity", nullable = false)
     private Integer minimumOrderQuantity;
 
+    @Column(name = "bulk_deal_quantity")
+    private Integer bulkDealQuantity;
+
+    @Column(name = "bulk_deal_price", precision = 12, scale = 2)
+    private BigDecimal bulkDealPrice;
+
     @Column(name = "available_stock", nullable = false)
     private Integer availableStock;
 

@@ -1,10 +1,10 @@
 package com.backend.StockLinker.ProfileService.model;
 
 import com.backend.StockLinker.AuthService.model.BaseEntity;
+import com.backend.StockLinker.ProfileService.enums.StoreSize;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
-
 import java.time.LocalTime;
 
 @Entity
@@ -36,6 +36,7 @@ public class BusinessProfile extends BaseEntity {
     @Column(name = "mobile_number", nullable = false, length = 20)
     private String mobileNumber;
 
+    @Column(name = "alternate_mobile_number", length = 20)
     private String alternateMobileNumber;
 
     @Column(name = "whatsapp_number", length = 20)
@@ -54,7 +55,7 @@ public class BusinessProfile extends BaseEntity {
     private boolean deliverySupported;
 
     @Column(name = "store_size", length = 50)
-    private String storeSize;
+    private StoreSize storeSize;
 
     @Column(name = "opening_time")
     private LocalTime openingTime;
@@ -71,6 +72,30 @@ public class BusinessProfile extends BaseEntity {
     @Column(name = "status", nullable = false, length = 30)
     private String status;
 
+    @Column(name = "verification_status", length = 30)
+    private String verificationStatus;
+
+    @Column(name = "trust_score")
+    private Integer trustScore;
+
+    @Column(name = "marketplace_rank")
+    private Integer marketplaceRank;
+
+    @Column(name = "rating")
+    private Double rating;
+
+    @Column(name = "review_count")
+    private Integer reviewCount;
+
+    @Column(name = "response_time", length = 50)
+    private String responseTime;
+
+    @Column(name = "total_orders_fulfilled")
+    private Integer totalOrdersFulfilled;
+
     @OneToOne(mappedBy = "businessProfile", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
     private BusinessAddress businessAddress;
+
+    @OneToOne(mappedBy = "businessProfile", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
+    private DeliveryConfiguration deliveryConfiguration;
 }
