@@ -1,0 +1,12 @@
+package com.backend.StockLinker.Auth_Service.repository;
+
+import com.backend.StockLinker.Auth_Service.model.Permission;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
+
+@Repository
+public interface PermissionRepository extends JpaRepository<Permission, String> {
+    Optional<Permission> findByName(String name);
+}
