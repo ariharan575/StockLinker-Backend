@@ -38,7 +38,8 @@ RUN chown -R spring:spring /app
 
 USER spring
 
-ENV PORT=8080
+# Remove PORT=8080 and let Render handle it
+# ENV PORT=8080  <-- REMOVE THIS LINE
 
 EXPOSE 8080
 
@@ -46,5 +47,4 @@ ENTRYPOINT ["sh","-c","java \
 -XX:+UseContainerSupport \
 -XX:MaxRAMPercentage=75.0 \
 -Djava.security.egd=file:/dev/./urandom \
--Dserver.port=${PORT} \
 -jar app.jar"]
