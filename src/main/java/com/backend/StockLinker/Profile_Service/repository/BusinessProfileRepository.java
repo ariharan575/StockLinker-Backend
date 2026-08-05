@@ -1,0 +1,34 @@
+package com.backend.StockLinker.Profile_Service.repository;
+
+import com.backend.StockLinker.Profile_Service.model.BusinessProfile;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.Optional;
+
+@Repository
+public interface BusinessProfileRepository extends JpaRepository<BusinessProfile, String> {
+    Optional<BusinessProfile> findByUserId(String userId);
+
+    @Query("SELECT p FROM BusinessProfile p JOIN p.businessAddress a " +
+            "WHERE p.businessType = :targetRole " +
+            "AND a.district = :userDistrict " +
+            "AND p.id != :currentProfileId " +
+            "ORDER BY p.trustScore DESC")
+    List<BusinessProfile> findNearbyInSameDistrict(
+            @Param("userDistrict") String userDistrict,
+            @Param("targetRole") String targetRole,
+            @Param("currentProfileId") String currentProfileId
+    );
+
+    List<BusinessProfile> findTop5ByBusinessNameContainingIgnoreCase(String businessName);
+
+    long countByTrustScoreGreaterThan(Integer trustScore);
+
+    // Add this new method to filter by both Name and BusinessType
+    List<BusinessProfile> findTop5ByBusinessNameContainingIgnoreCaseAndBusinessTypeIgnoreCase(String businessName, String businessType);
+
+}
