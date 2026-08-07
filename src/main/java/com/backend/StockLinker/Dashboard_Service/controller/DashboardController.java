@@ -23,9 +23,6 @@ public class DashboardController {
 
     @GetMapping("/search")
     public ResponseEntity<OmniSearchDto> globalSearch(@RequestParam String query, Authentication auth) {
-        // Pass auth.getName() (userId) to the service so we know WHO is searching
         return ResponseEntity.ok(dashboardService.globalSearch(query, auth.getName()));
     }
-
-
 }

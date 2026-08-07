@@ -1,5 +1,14 @@
 package com.backend.StockLinker.Order_Service.service;
 
+import com.backend.StockLinker.Audit_Service.Dto.AuditLogRequest;
+import com.backend.StockLinker.Audit_Service.Entity.AuditLog;
+import com.backend.StockLinker.Audit_Service.Enums.AuditAction;
+import com.backend.StockLinker.Audit_Service.Enums.ResourceType;
+import com.backend.StockLinker.Audit_Service.Services.AuditService;
+import com.backend.StockLinker.Auth_Service.service.IpAddressService;
+import com.backend.StockLinker.Exception.customExceptions.BadRequestException;
+import com.backend.StockLinker.Exception.customExceptions.ForbiddenException;
+import com.backend.StockLinker.Exception.customExceptions.ResourceNotFoundException;
 import com.backend.StockLinker.Notification_Service.enums.NotificationType;
 import com.backend.StockLinker.Notification_Service.service.NotificationService;
 import com.backend.StockLinker.Order_Service.dto.OrderActionDtos;
@@ -17,7 +26,9 @@ import com.backend.StockLinker.Profile_Service.model.BusinessProfile;
 import com.backend.StockLinker.Profile_Service.model.SellerProduct;
 import com.backend.StockLinker.Profile_Service.repository.BusinessProfileRepository;
 import com.backend.StockLinker.Profile_Service.repository.SellerProductRepository;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,11 +49,18 @@ public class OrderService {
     private final OrderWebSocketService webSocketService;
     private final NotificationService notificationService;
 
-    // 1. PLACE ORDER (Shopkeeper to Wholesaler)
+    // Auditing
+    private final AuditService auditService;
+    private final IpAddressService ipAddressService;
+
     @Transactional
-    public void placeOrder(String buyerId, OrderRequestDto request) {
+    public void placeOrder(String buyerId, OrderRequestDto request, HttpServletRequest httpRequest) {
         BusinessProfile sellerProfile = businessProfileRepository.findById(request.getBusinessProfileId())
-                .orElseThrow(() -> new RuntimeException("Seller profile not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Seller profile not found"));
+
+        if (request.getItems() == null || request.getItems().isEmpty()) {
+            throw new BadRequestException("Order must contain at least one item.");
+        }
 
         Order order = Order.builder()
                 .orderNumber("SL-" + System.currentTimeMillis())
@@ -57,7 +75,7 @@ public class OrderService {
 
         for (OrderRequestDto.OrderItemRequest itemReq : request.getItems()) {
             SellerProduct product = sellerProductRepository.findById(itemReq.getProductId())
-                    .orElseThrow(() -> new RuntimeException("Product not found: " + itemReq.getProductId()));
+                    .orElseThrow(() -> new ResourceNotFoundException("Product not found: " + itemReq.getProductId()));
 
             BigDecimal lineTotal = product.getPrice().multiply(BigDecimal.valueOf(itemReq.getQuantity()));
             subtotal = subtotal.add(lineTotal);
@@ -94,13 +112,13 @@ public class OrderService {
         notificationService.saveAndSend(order.getSellerId(), buyerId, NotificationType.ORDER, savedOrder.getId(),
                 "New Order Request", "You received a new order (" + savedOrder.getOrderNumber() + ").");
 
-        // Notify Wholesaler immediately
         webSocketService.notifyUserOrderUpdate(
                 sellerProfile.getUserId(), savedOrder.getId(), OrderStatus.PENDING.name(), "NEW_ORDER_RECEIVED", Map.of()
         );
+
+        logAudit(buyerId, AuditAction.ORDER_PLACED, "Placed order: " + savedOrder.getOrderNumber(), httpRequest);
     }
 
-    // 2. FETCH ORDERS BY ROLE
     @Transactional(readOnly = true)
     public List<OrderResponseDto> getOrdersForUser(String userId, String userRole, String status) {
         List<Order> orders;
@@ -118,11 +136,10 @@ public class OrderService {
         return orders.stream().map(this::mapToDto).collect(Collectors.toList());
     }
 
-    // 3. ACCEPT ORDER (PENDING -> PROCESSING)
     @Transactional
-    public void acceptAndScheduleOrder(String orderId, String wholesalerUserId, OrderActionDtos.ScheduleOrderDto scheduleDto) {
-        Order order = orderRepository.findById(orderId).orElseThrow(() -> new RuntimeException("Order not found"));
-        if (!order.getSellerId().equals(wholesalerUserId)) throw new RuntimeException("Unauthorized action");
+    public void acceptAndScheduleOrder(String orderId, String wholesalerUserId, OrderActionDtos.ScheduleOrderDto scheduleDto, HttpServletRequest request) {
+        Order order = orderRepository.findById(orderId).orElseThrow(() -> new ResourceNotFoundException("Order not found"));
+        if (!order.getSellerId().equals(wholesalerUserId)) throw new ForbiddenException("Unauthorized action");
 
         order.setStatus(OrderStatus.PROCESSING);
         order.setConfirmedAt(LocalDateTime.now());
@@ -146,12 +163,14 @@ public class OrderService {
                 "Order Accepted", "Your order has been scheduled for " + scheduleDto.getDeliveryDate());
 
         webSocketService.notifyUserOrderUpdate(order.getBuyerId(), order.getId(), OrderStatus.PROCESSING.name(), "ORDER_ACCEPTED", Map.of());
+
+        logAudit(wholesalerUserId, AuditAction.ORDER_ACCEPTED, "Accepted order: " + order.getOrderNumber(), request);
     }
 
     @Transactional
-    public void rejectOrder(String orderId, String wholesalerUserId, OrderActionDtos.RejectOrderDto rejectDto) {
-        Order order = orderRepository.findById(orderId).orElseThrow();
-        if (!order.getSellerId().equals(wholesalerUserId)) throw new RuntimeException("Unauthorized");
+    public void rejectOrder(String orderId, String wholesalerUserId, OrderActionDtos.RejectOrderDto rejectDto, HttpServletRequest request) {
+        Order order = orderRepository.findById(orderId).orElseThrow(() -> new ResourceNotFoundException("Order not found"));
+        if (!order.getSellerId().equals(wholesalerUserId)) throw new ForbiddenException("Unauthorized");
 
         order.setStatus(OrderStatus.CANCELLED);
         order.setCancelledAt(LocalDateTime.now());
@@ -160,6 +179,8 @@ public class OrderService {
 
         deliveryTrackingRepository.findByOrderId(orderId).ifPresent(deliveryTrackingRepository::delete);
         webSocketService.notifyUserOrderUpdate(order.getBuyerId(), order.getId(), OrderStatus.CANCELLED.name(), "ORDER_REJECTED", Map.of());
+
+        logAudit(wholesalerUserId, AuditAction.ORDER_REJECTED, "Rejected order: " + order.getOrderNumber(), request);
     }
 
     @Transactional(readOnly = true)
@@ -169,13 +190,12 @@ public class OrderService {
         return orders.stream().map(this::mapToDto).collect(Collectors.toList());
     }
 
-    // 4. ROUTE SEQUENCING (Order Arranged 1, 2, 3)
     @Transactional
-    public void updateDeliverySequence(String sellerId, OrderActionDtos.UpdateSequenceDto sequenceDto) {
+    public void updateDeliverySequence(String sellerId, OrderActionDtos.UpdateSequenceDto sequenceDto, HttpServletRequest request) {
         List<String> orderedIds = sequenceDto.getOrderedOrderIds();
         for (int i = 0; i < orderedIds.size(); i++) {
-            Order order = orderRepository.findById(orderedIds.get(i)).orElseThrow();
-            if (!order.getSellerId().equals(sellerId)) throw new RuntimeException("Unauthorized");
+            Order order = orderRepository.findById(orderedIds.get(i)).orElseThrow(() -> new ResourceNotFoundException("Order not found"));
+            if (!order.getSellerId().equals(sellerId)) throw new ForbiddenException("Unauthorized");
 
             int seq = i + 1;
             order.setDeliverySequenceNumber(seq);
@@ -186,11 +206,11 @@ public class OrderService {
                 deliveryTrackingRepository.save(dt);
             });
         }
+        logAudit(sellerId, AuditAction.DELIVERY_SEQUENCE_UPDATED, "Updated delivery sequence for date: " + sequenceDto.getDeliveryDate(), request);
     }
 
-    // 5. START ROUTE (PROCESSING -> OUT_FOR_DELIVERY)
     @Transactional
-    public void startRouteForDate(String sellerId, LocalDate deliveryDate) {
+    public void startRouteForDate(String sellerId, LocalDate deliveryDate, HttpServletRequest request) {
         List<Order> orders = orderRepository.findBySellerIdAndDeliveryDateAndStatusInOrderByDeliverySequenceNumberAsc(
                 sellerId, deliveryDate, List.of(OrderStatus.PROCESSING));
 
@@ -210,13 +230,13 @@ public class OrderService {
 
             webSocketService.notifyUserOrderUpdate(order.getBuyerId(), order.getId(), OrderStatus.OUT_FOR_DELIVERY.name(), "ROUTE_STARTED", Map.of());
         }
+        logAudit(sellerId, AuditAction.ROUTE_STARTED, "Started delivery route for date: " + deliveryDate, request);
     }
 
-    // 6. DELIVERED
     @Transactional
-    public void markAsDelivered(String orderId, String currentUserId) {
-        Order order = orderRepository.findById(orderId).orElseThrow();
-        if (!order.getSellerId().equals(currentUserId)) throw new RuntimeException("Unauthorized");
+    public void markAsDelivered(String orderId, String currentUserId, HttpServletRequest request) {
+        Order order = orderRepository.findById(orderId).orElseThrow(() -> new ResourceNotFoundException("Order not found"));
+        if (!order.getSellerId().equals(currentUserId)) throw new ForbiddenException("Unauthorized");
 
         LocalDateTime now = LocalDateTime.now();
         order.setStatus(OrderStatus.DELIVERED);
@@ -233,12 +253,13 @@ public class OrderService {
                 "Order Delivered", "Your order was successfully delivered.");
 
         webSocketService.notifyUserOrderUpdate(order.getBuyerId(), order.getId(), OrderStatus.DELIVERED.name(), "ORDER_DELIVERED", Map.of());
+
+        logAudit(currentUserId, AuditAction.ORDER_DELIVERED, "Marked order as delivered: " + order.getOrderNumber(), request);
     }
 
-    // 7. GET LIVE TRACKING ROUTE
     @Transactional(readOnly = true)
     public List<Map<String, Object>> getActiveDeliveryRoute(String orderId, String currentUserId) {
-        Order referenceOrder = orderRepository.findById(orderId).orElseThrow();
+        Order referenceOrder = orderRepository.findById(orderId).orElseThrow(() -> new ResourceNotFoundException("Order not found"));
         List<Order> routeOrders = orderRepository.findBySellerIdAndDeliveryDateAndStatusInOrderByDeliverySequenceNumberAsc(
                 referenceOrder.getSellerId(), referenceOrder.getDeliveryDate(),
                 List.of(OrderStatus.PROCESSING, OrderStatus.OUT_FOR_DELIVERY, OrderStatus.DELIVERED));
@@ -259,24 +280,32 @@ public class OrderService {
         }).collect(Collectors.toList());
     }
 
-
-    // 3. DASHBOARD REORDER WIDGET LOGIC
+    // HIGHLY OPTIMIZED REORDER SUMMARY (Eliminated N+1 inside loop)
     @Transactional(readOnly = true)
     public List<ReorderSummaryDto> getReorderSummary(String userId) {
-        // Fetch all orders for this buyer
         List<Order> allUserOrders = orderRepository.findByBuyerIdOrderByCreatedAtDesc(userId);
 
-        // ENFORCING UX RULE: Hide section entirely if less than 3 orders exist
         if (allUserOrders.size() < 3) {
             return new ArrayList<>();
         }
 
+        int limit = Math.min(8, allUserOrders.size());
+        List<Order> limitedOrders = allUserOrders.subList(0, limit);
+
+        // Fetch all product IDs efficiently outside the loop
+        Set<String> productIds = limitedOrders.stream()
+                .flatMap(o -> o.getOrderItems().stream())
+                .map(OrderItem::getOriginalProductId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        // Batch fetch all required seller products to prevent DB queries inside the loop
+        Map<String, SellerProduct> currentProductsMap = sellerProductRepository.findAllById(productIds)
+                .stream().collect(Collectors.toMap(SellerProduct::getId, p -> p));
+
         List<ReorderSummaryDto> summaries = new ArrayList<>();
-        int limit = Math.min(8, allUserOrders.size()); // Fetch up to 8 for the horizontal scroll
 
-        for (int i = 0; i < limit; i++) {
-            Order order = allUserOrders.get(i);
-
+        for (Order order : limitedOrders) {
             BusinessProfile sellerProfile = businessProfileRepository.findByUserId(order.getSellerId()).orElse(null);
             if (sellerProfile == null) continue;
 
@@ -284,29 +313,24 @@ public class OrderService {
             List<String> itemNames = new ArrayList<>();
             String firstMasterProductId = null;
 
-            // Loop through the historical items in the order
             for (OrderItem item : order.getOrderItems()) {
                 itemNames.add(item.getProductName() + " ×" + item.getQuantity());
 
-                // Fetch the LIVE current price from the SellerProduct table for this exact item
                 SellerProduct currentProduct = null;
                 if (item.getOriginalProductId() != null) {
-                    currentProduct = sellerProductRepository.findById(item.getOriginalProductId()).orElse(null);
+                    currentProduct = currentProductsMap.get(item.getOriginalProductId());
                 }
 
                 if (currentProduct != null) {
-                    // Multiply today's live price by the historical quantity
                     currentTotal = currentTotal.add(currentProduct.getPrice().multiply(BigDecimal.valueOf(item.getQuantity())));
                     if (firstMasterProductId == null && currentProduct.getMasterProduct() != null) {
                         firstMasterProductId = currentProduct.getMasterProduct().getId();
                     }
                 } else {
-                    // Fallback to old purchase price if product was removed by seller
                     currentTotal = currentTotal.add(item.getLineTotal());
                 }
             }
 
-            // Calculate Difference: (Current Live Price - Old Purchase Price)
             BigDecimal diff = currentTotal.subtract(order.getTotalAmount());
 
             summaries.add(ReorderSummaryDto.builder()
@@ -331,7 +355,23 @@ public class OrderService {
         return recentOrders.stream().map(this::mapToDto).collect(Collectors.toList());
     }
 
-    // MAPPER FOR UI MODAL
+    private void logAudit(String userId, AuditAction action, String details, HttpServletRequest request) {
+        String ip = (request != null) ? ipAddressService.getClientIp(request) : "Unknown";
+        String userAgent = (request != null) ? request.getHeader(HttpHeaders.USER_AGENT) : "Unknown";
+        String deviceId = (request != null) ? (String) request.getAttribute("deviceId") : "Unknown";
+
+        auditService.log(AuditLogRequest.builder()
+                .userId(userId)
+                .action(action)
+                .resourceType(ResourceType.ORDER)
+                .ipAddress(ip)
+                .userAgent(userAgent)
+                .deviceId(deviceId)
+                .status(AuditLog.Status.SUCCESS)
+                .newValue(details)
+                .build());
+    }
+
     private OrderResponseDto mapToDto(Order o) {
         BusinessProfile buyerProfile = businessProfileRepository.findByUserId(o.getBuyerId()).orElse(null);
         String buyerName = buyerProfile != null ? buyerProfile.getBusinessName() : "Shopkeeper Partner";

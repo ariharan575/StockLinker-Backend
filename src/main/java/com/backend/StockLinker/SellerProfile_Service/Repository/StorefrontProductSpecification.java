@@ -2,6 +2,7 @@ package com.backend.StockLinker.SellerProfile_Service.Repository;
 
 import com.backend.StockLinker.Profile_Service.model.SellerProduct;
 import org.springframework.data.jpa.domain.Specification;
+import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import java.util.ArrayList;
 import java.util.List;
@@ -12,6 +13,14 @@ public class StorefrontProductSpecification {
             String businessProfileId, String search, String category, String brand) {
 
         return (root, query, criteriaBuilder) -> {
+
+            // FIX: Fetch deep relationships immediately to prevent N+1 inside loops later
+            if (Long.class != query.getResultType() && long.class != query.getResultType()) {
+                root.fetch("masterProduct", JoinType.LEFT)
+                        .fetch("productSubCategory", JoinType.LEFT)
+                        .fetch("productCategory", JoinType.LEFT);
+            }
+
             List<Predicate> predicates = new ArrayList<>();
 
             // STRICT SAAS RULES: Only this specific business, only ACTIVE status, and available stock > 0

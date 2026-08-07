@@ -3,29 +3,20 @@ package com.backend.StockLinker.Message_Service.entity;
 import com.backend.StockLinker.Message_Service.enums.MessageStatus;
 import com.backend.StockLinker.Message_Service.enums.MessageType;
 import com.backend.StockLinker.Message_Service.enums.UserRole;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.springframework.data.annotation.CreatedDate;
-import org.springframework.data.annotation.Id;
-import org.springframework.data.annotation.LastModifiedDate;
-import org.springframework.data.mongodb.core.index.CompoundIndex;
-import org.springframework.data.mongodb.core.index.CompoundIndexes;
-import org.springframework.data.mongodb.core.index.Indexed;
-import org.springframework.data.mongodb.core.mapping.Document;
-import org.springframework.data.mongodb.core.mapping.Field;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.Instant;
 
-/**
- * A single text message belonging to a Conversation.
- * Soft-deleted only — the deleted flag hides content, the document is never removed.
- */
-@Document(collection = "message")
-@CompoundIndexes({
-        @CompoundIndex(name = "conversation_createdAt_idx", def = "{'conversationId': 1, 'createdAt': -1}"),
-        @CompoundIndex(name = "receiver_status_idx", def = "{'receiverId': 1, 'status': 1}")
+@Entity
+@Table(name = "message", indexes = {
+        @Index(name = "conversation_createdAt_idx", columnList = "conversation_id, created_at DESC"),
+        @Index(name = "receiver_status_idx", columnList = "receiver_id, status")
 })
 @Data
 @Builder
@@ -34,66 +25,67 @@ import java.time.Instant;
 public class Message {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
     private String id;
 
-    @Field("conversationId")
-    @Indexed
+    @Column(name = "conversation_id")
     private String conversationId;
 
-    @Field("senderId")
+    @Column(name = "sender_id")
     private String senderId;
 
-    @Field("receiverId")
-    @Indexed
+    @Column(name = "receiver_id")
     private String receiverId;
 
-    @Field("senderRole")
+    @Enumerated(EnumType.STRING)
+    @Column(name = "sender_role")
     private UserRole senderRole;
 
-    @Field("receiverRole")
+    @Enumerated(EnumType.STRING)
+    @Column(name = "receiver_role")
     private UserRole receiverRole;
 
-    @Field("message")
+    @Column(name = "message", columnDefinition = "TEXT")
     private String message;
 
-    @Field("messageType")
+    @Enumerated(EnumType.STRING)
     @Builder.Default
+    @Column(name = "message_type")
     private MessageType messageType = MessageType.TEXT;
 
-    @Field("status")
-    @Indexed
+    @Enumerated(EnumType.STRING)
     @Builder.Default
+    @Column(name = "status")
     private MessageStatus status = MessageStatus.SENT;
 
-    @Field("edited")
     @Builder.Default
+    @Column(name = "edited", nullable = false)
     private boolean edited = false;
 
-    @Field("editedAt")
+    @Column(name = "edited_at")
     private Instant editedAt;
 
-    @Field("deleted")
     @Builder.Default
+    @Column(name = "deleted", nullable = false)
     private boolean deleted = false;
 
-    @Field("deletedAt")
+    @Column(name = "deleted_at")
     private Instant deletedAt;
 
-    @Field("sentAt")
+    @Column(name = "sent_at")
     private Instant sentAt;
 
-    @Field("deliveredAt")
+    @Column(name = "delivered_at")
     private Instant deliveredAt;
 
-    @Field("readAt")
+    @Column(name = "read_at")
     private Instant readAt;
 
-    @CreatedDate
-    @Field("createdAt")
-    @Indexed
+    @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
     private Instant createdAt;
 
-    @LastModifiedDate
-    @Field("updatedAt")
+    @UpdateTimestamp
+    @Column(name = "updated_at")
     private Instant updatedAt;
 }

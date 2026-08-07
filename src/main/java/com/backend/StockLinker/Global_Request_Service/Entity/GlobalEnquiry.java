@@ -1,6 +1,7 @@
 package com.backend.StockLinker.Global_Request_Service.Entity;
 
 import com.backend.StockLinker.Profile_Service.model.MasterProduct;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -26,6 +27,7 @@ public class GlobalEnquiry {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "master_product_id", nullable = false)
+    @JsonIgnore
     private MasterProduct masterProduct;
 
     @Column(nullable = false)

@@ -49,6 +49,8 @@ public class AuthService {
     private final AuditService auditService;
     private final IpAddressService ipAddressService;
 
+    private final FirebaseAuth firebaseAuth;
+
     @Transactional
     public AuthResponse googleLogin(OAuth2User oauthUser, String deviceId,
                                     HttpServletRequest request, HttpServletResponse response) {
@@ -116,7 +118,8 @@ public class AuthService {
 
             FirebaseToken decoded;
             try {
-                decoded = FirebaseAuth.getInstance().verifyIdToken(idToken);
+                decoded = firebaseAuth.verifyIdToken(idToken);
+
             } catch (FirebaseAuthException e) {
                 log.error("Firebase token verification failed: {}", e.getMessage());
                 throw new InvalidTokenException("Invalid or expired Firebase token: " + e.getMessage());

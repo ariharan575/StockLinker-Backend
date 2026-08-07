@@ -2,22 +2,21 @@ package com.backend.StockLinker.Audit_Service.Entity;
 
 import com.backend.StockLinker.Audit_Service.Enums.AuditAction;
 import com.backend.StockLinker.Audit_Service.Enums.ResourceType;
+import jakarta.persistence.*;
 import lombok.*;
-import org.springframework.data.annotation.CreatedDate;
-import org.springframework.data.annotation.Id;
-import org.springframework.data.annotation.LastModifiedDate;
-import org.springframework.data.mongodb.core.index.CompoundIndex;
-import org.springframework.data.mongodb.core.index.CompoundIndexes;
-import org.springframework.data.mongodb.core.index.Indexed;
-import org.springframework.data.mongodb.core.mapping.Document;
-import org.springframework.data.mongodb.core.mapping.Field;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
 
-@Document(collection = "audit_logs")
-@CompoundIndexes({
-        @CompoundIndex(name = "idx_audit_resource", def = "{'resource_type': 1, 'resource_id': 1}"),
-        @CompoundIndex(name = "idx_audit_created", def = "{'createdAt': -1}")
+@Entity
+@Table(name = "audit_logs", indexes = {
+        @Index(name = "idx_audit_resource", columnList = "resource_type, resource_id"),
+        @Index(name = "idx_audit_created", columnList = "created_at DESC"),
+        @Index(name = "idx_audit_user", columnList = "user_id"),
+        @Index(name = "idx_audit_action", columnList = "action"),
+        @Index(name = "idx_audit_status", columnList = "status"),
+        @Index(name = "idx_audit_device_id", columnList = "device_id")
 })
 @Setter
 @Getter
@@ -27,60 +26,60 @@ import java.time.LocalDateTime;
 public class AuditLog {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
     private String id;
 
-    @Indexed(name = "idx_audit_user")
-    @Field("user_id")
-    private String userId; // Store as String, not as a JPA Entity!
+    @Column(name = "user_id")
+    private String userId;
 
-    @Indexed(name = "idx_audit_action")
-    @Field("action")
+    @Enumerated(EnumType.STRING)
+    @Column(name = "action")
     private AuditAction action;
 
-    @Field("resource_id")
+    @Column(name = "resource_id")
     private String resourceId;
 
-    @Field("resource_type")
+    @Enumerated(EnumType.STRING)
+    @Column(name = "resource_type")
     private ResourceType resourceType;
 
-    @Field("old_value")
+    @Column(name = "old_value", columnDefinition = "TEXT")
     private String oldValue;
 
-    @Field("new_value")
+    @Column(name = "new_value", columnDefinition = "TEXT")
     private String newValue;
 
-    @Field("ip_address")
+    @Column(name = "ip_address")
     private String ipAddress;
 
-    @Field("user_agent")
+    @Column(name = "user_agent")
     private String userAgent;
 
-    @Indexed(name = "idx_audit_status")
-    @Field("status")
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status")
     private Status status;
 
-    @Field("request_uri")
+    @Column(name = "request_uri")
     private String requestUri;
 
-    @Field("http_method")
+    @Column(name = "http_method")
     private String httpMethod;
 
-    @Field("response_status")
+    @Column(name = "response_status")
     private Integer responseStatus;
 
-    @Field("failure_reason")
+    @Column(name = "failure_reason", columnDefinition = "TEXT")
     private String failureReason;
 
-    @Indexed(name = "idx_audit_device_id")
-    @Field("device_id")
+    @Column(name = "device_id")
     private String deviceId;
 
-    @CreatedDate
-    @Field("created_at")
+    @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
-    @LastModifiedDate
-    @Field("updated_at")
+    @UpdateTimestamp
+    @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
     public enum Status {

@@ -1,5 +1,14 @@
 package com.backend.StockLinker.Message_Service.service.impl;
 
+import com.backend.StockLinker.Audit_Service.Dto.AuditLogRequest;
+import com.backend.StockLinker.Audit_Service.Entity.AuditLog;
+import com.backend.StockLinker.Audit_Service.Enums.AuditAction;
+import com.backend.StockLinker.Audit_Service.Enums.ResourceType;
+import com.backend.StockLinker.Audit_Service.Services.AuditService;
+import com.backend.StockLinker.Auth_Service.service.IpAddressService;
+import com.backend.StockLinker.Exception.customExceptions.BadRequestException;
+import com.backend.StockLinker.Exception.customExceptions.ForbiddenException;
+import com.backend.StockLinker.Exception.customExceptions.ResourceNotFoundException;
 import com.backend.StockLinker.Message_Service.dto.request.EditMessageRequest;
 import com.backend.StockLinker.Message_Service.dto.request.ReadMessageRequest;
 import com.backend.StockLinker.Message_Service.dto.request.SendMessageRequest;
@@ -19,13 +28,18 @@ import com.backend.StockLinker.Message_Service.security.CurrentUserProvider;
 import com.backend.StockLinker.Message_Service.service.MessageService;
 import com.backend.StockLinker.Notification_Service.enums.NotificationType;
 import com.backend.StockLinker.Notification_Service.service.NotificationService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpHeaders;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.context.request.RequestAttributes;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.time.Instant;
 import java.util.List;
@@ -44,6 +58,17 @@ public class MessageServiceImpl implements MessageService {
     private final SimpMessagingTemplate messagingTemplate;
     private final NotificationService notificationService;
 
+    private final AuditService auditService;
+    private final IpAddressService ipAddressService;
+
+    private HttpServletRequest getCurrentHttpRequest() {
+        RequestAttributes attrs = RequestContextHolder.getRequestAttributes();
+        if (attrs instanceof ServletRequestAttributes) {
+            return ((ServletRequestAttributes) attrs).getRequest();
+        }
+        return null;
+    }
+
     @Override
     @Transactional
     public MessageResponse sendMessage(SendMessageRequest request) {
@@ -51,33 +76,33 @@ public class MessageServiceImpl implements MessageService {
 
         String trimmed = request.getMessage() == null ? "" : request.getMessage().trim();
         if (trimmed.isEmpty()) {
-            throw new IllegalArgumentException("Message cannot be empty");
+            throw new BadRequestException("Message cannot be empty");
         }
         if (trimmed.length() > MAX_MESSAGE_LENGTH) {
-            throw new IllegalArgumentException("Message cannot exceed " + MAX_MESSAGE_LENGTH + " characters");
+            throw new BadRequestException("Message cannot exceed " + MAX_MESSAGE_LENGTH + " characters");
         }
 
         Conversation conversation = conversationRepository.findById(request.getConversationId())
-                .orElseThrow(() -> new IllegalArgumentException("Conversation not found: " + request.getConversationId()));
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
 
         if (!conversation.isParticipant(currentUserId)) {
-            throw new IllegalStateException("You are not a participant in this conversation");
+            throw new ForbiddenException("You are not a participant in this conversation");
         }
 
         boolean senderIsBuyer = conversation.getBuyerId().equals(currentUserId);
         String receiverId = conversation.otherPartyId(currentUserId);
 
         if (senderIsBuyer && conversation.isBuyerBlocked()) {
-            throw new IllegalStateException("You have blocked this user; unblock to send messages");
+            throw new ForbiddenException("You have blocked this user; unblock to send messages");
         }
         if (senderIsBuyer && conversation.isSellerBlocked()) {
-            throw new IllegalStateException("You have been blocked in this conversation");
+            throw new ForbiddenException("You have been blocked in this conversation");
         }
         if (!senderIsBuyer && conversation.isSellerBlocked()) {
-            throw new IllegalStateException("You have blocked this user; unblock to send messages");
+            throw new ForbiddenException("You have blocked this user; unblock to send messages");
         }
         if (!senderIsBuyer && conversation.isBuyerBlocked()) {
-            throw new IllegalStateException("You have been blocked in this conversation");
+            throw new ForbiddenException("You have been blocked in this conversation");
         }
 
         UserRole senderRole = senderIsBuyer ? UserRole.BUYER : UserRole.SELLER;
@@ -117,12 +142,11 @@ public class MessageServiceImpl implements MessageService {
         conversationRepository.save(conversation);
 
         log.info("Message {} sent in conversation {} by {}", message.getId(), conversation.getId(), currentUserId);
+        logAudit(currentUserId, AuditAction.MESSAGE_SENT, "Sent message in conversation: " + conversation.getId());
 
-        // ── Real-time push ──────────────────────────────────────────
         MessageResponse forReceiver = messageMapper.toResponse(message, receiverId);
         messagingTemplate.convertAndSend("/topic/conversation/" + conversation.getId(), forReceiver);
 
-        // 🚀 GLOBAL NOTIFICATION TO RECEIVER (Updates their left Sidebar dynamically like WhatsApp)
         messagingTemplate.convertAndSendToUser(receiverId, "/queue/chat", "REFRESH_SIDEBAR");
 
         notificationService.saveAndSend(receiverId, currentUserId, NotificationType.MESSAGE, conversation.getId(),
@@ -135,10 +159,10 @@ public class MessageServiceImpl implements MessageService {
     public PagedMessageResponse getMessages(String conversationId, Pageable pageable) {
         String currentUserId = currentUserProvider.getCurrentUserId();
         Conversation conversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new IllegalArgumentException("Conversation not found: " + conversationId));
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
 
         if (!conversation.isParticipant(currentUserId)) {
-            throw new IllegalStateException("You are not a participant in this conversation");
+            throw new ForbiddenException("You are not a participant in this conversation");
         }
 
         Page<Message> page = messageRepository.findByConversationIdOrderByCreatedAtDesc(conversationId, pageable);
@@ -162,10 +186,10 @@ public class MessageServiceImpl implements MessageService {
     public MessageResponse markAsRead(String conversationId, ReadMessageRequest request) {
         String currentUserId = currentUserProvider.getCurrentUserId();
         Conversation conversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new IllegalArgumentException("Conversation not found: " + conversationId));
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
 
         if (!conversation.isParticipant(currentUserId)) {
-            throw new IllegalStateException("You are not a participant in this conversation");
+            throw new ForbiddenException("You are not a participant in this conversation");
         }
 
         List<Message> unread = messageRepository.findUnreadForUserInConversation(conversationId, currentUserId);
@@ -196,6 +220,7 @@ public class MessageServiceImpl implements MessageService {
                             .status(MessageStatus.READ)
                             .build());
 
+            logAudit(currentUserId, AuditAction.MESSAGE_READ, "Marked conversation as read: " + conversationId);
             return messageMapper.toResponse(lastRead, currentUserId);
         }
 
@@ -212,10 +237,10 @@ public class MessageServiceImpl implements MessageService {
     public MessageResponse markAsDelivered(String messageId) {
         String currentUserId = currentUserProvider.getCurrentUserId();
         Message message = messageRepository.findById(messageId)
-                .orElseThrow(() -> new IllegalArgumentException("Message not found: " + messageId));
+                .orElseThrow(() -> new ResourceNotFoundException("Message not found"));
 
         if (!message.getReceiverId().equals(currentUserId)) {
-            throw new IllegalStateException("Only the receiver can mark a message as delivered");
+            throw new ForbiddenException("Only the receiver can mark a message as delivered");
         }
 
         if (message.getStatus() == MessageStatus.SENT) {
@@ -240,21 +265,21 @@ public class MessageServiceImpl implements MessageService {
     public MessageResponse editMessage(String messageId, EditMessageRequest request) {
         String currentUserId = currentUserProvider.getCurrentUserId();
         Message message = messageRepository.findById(messageId)
-                .orElseThrow(() -> new IllegalArgumentException("Message not found: " + messageId));
+                .orElseThrow(() -> new ResourceNotFoundException("Message not found"));
 
         if (!message.getSenderId().equals(currentUserId)) {
-            throw new IllegalStateException("Only the sender can edit this message");
+            throw new ForbiddenException("Only the sender can edit this message");
         }
         if (message.isDeleted()) {
-            throw new IllegalStateException("Cannot edit a deleted message");
+            throw new BadRequestException("Cannot edit a deleted message");
         }
 
         String trimmed = request.getMessage() == null ? "" : request.getMessage().trim();
         if (trimmed.isEmpty()) {
-            throw new IllegalArgumentException("Message cannot be empty");
+            throw new BadRequestException("Message cannot be empty");
         }
         if (trimmed.length() > MAX_MESSAGE_LENGTH) {
-            throw new IllegalArgumentException("Message cannot exceed " + MAX_MESSAGE_LENGTH + " characters");
+            throw new BadRequestException("Message cannot exceed " + MAX_MESSAGE_LENGTH + " characters");
         }
 
         message.setMessage(trimmed);
@@ -273,6 +298,8 @@ public class MessageServiceImpl implements MessageService {
         messagingTemplate.convertAndSend("/topic/conversation/" + message.getConversationId(),
                 messageMapper.toResponse(message, message.getReceiverId()));
 
+        logAudit(currentUserId, AuditAction.MESSAGE_EDITED, "Edited message: " + messageId);
+
         return messageMapper.toResponse(message, currentUserId);
     }
 
@@ -281,10 +308,10 @@ public class MessageServiceImpl implements MessageService {
     public void deleteMessage(String messageId) {
         String currentUserId = currentUserProvider.getCurrentUserId();
         Message message = messageRepository.findById(messageId)
-                .orElseThrow(() -> new IllegalArgumentException("Message not found: " + messageId));
+                .orElseThrow(() -> new ResourceNotFoundException("Message not found"));
 
         if (!message.getSenderId().equals(currentUserId)) {
-            throw new IllegalStateException("Only the sender can delete this message");
+            throw new ForbiddenException("Only the sender can delete this message");
         }
 
         message.setDeleted(true);
@@ -295,6 +322,7 @@ public class MessageServiceImpl implements MessageService {
                 messageMapper.toResponse(message, message.getReceiverId()));
 
         log.info("Message {} soft-deleted by {}", messageId, currentUserId);
+        logAudit(currentUserId, AuditAction.MESSAGE_DELETED, "Deleted message: " + messageId);
     }
 
     @Override
@@ -311,5 +339,23 @@ public class MessageServiceImpl implements MessageService {
                 .totalUnreadCount(totalUnread)
                 .conversationsWithUnread(buyerConvCount + sellerConvCount)
                 .build();
+    }
+
+    private void logAudit(String userId, AuditAction action, String details) {
+        HttpServletRequest request = getCurrentHttpRequest();
+        String ip = (request != null) ? ipAddressService.getClientIp(request) : "Unknown";
+        String userAgent = (request != null) ? request.getHeader(HttpHeaders.USER_AGENT) : "Unknown";
+        String deviceId = (request != null) ? (String) request.getAttribute("deviceId") : "Unknown";
+
+        auditService.log(AuditLogRequest.builder()
+                .userId(userId)
+                .action(action)
+                .resourceType(ResourceType.MESSAGE)
+                .ipAddress(ip)
+                .userAgent(userAgent)
+                .deviceId(deviceId)
+                .status(AuditLog.Status.SUCCESS)
+                .newValue(details)
+                .build());
     }
 }

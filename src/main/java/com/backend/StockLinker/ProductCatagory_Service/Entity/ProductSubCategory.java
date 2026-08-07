@@ -1,6 +1,7 @@
 package com.backend.StockLinker.ProductCatagory_Service.Entity;
 
 import com.backend.StockLinker.Auth_Service.model.BaseEntity;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
@@ -16,6 +17,7 @@ public class ProductSubCategory extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "product_category_id", nullable = false)
+    @JsonIgnore
     private ProductCategory productCategory;
 
     @Column(name = "name", nullable = false, length = 100)

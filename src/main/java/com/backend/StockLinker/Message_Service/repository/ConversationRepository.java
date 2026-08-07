@@ -3,12 +3,13 @@ package com.backend.StockLinker.Message_Service.repository;
 import com.backend.StockLinker.Message_Service.entity.Conversation;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.mongodb.repository.MongoRepository;
-import org.springframework.data.mongodb.repository.Query;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
 
-public interface ConversationRepository extends MongoRepository<Conversation, String> {
+public interface ConversationRepository extends JpaRepository<Conversation, String> {
 
     Optional<Conversation> findByConversationCode(String conversationCode);
 
@@ -16,23 +17,24 @@ public interface ConversationRepository extends MongoRepository<Conversation, St
 
     boolean existsByBuyerIdAndSellerId(String buyerId, String sellerId);
 
-    @Query("{ 'buyerId': ?0, 'buyerDeleted': false }")
-    Page<Conversation> findActiveForBuyer(String buyerId, Pageable pageable);
+    @Query("SELECT c FROM Conversation c WHERE c.buyerId = :buyerId AND c.buyerDeleted = false")
+    Page<Conversation> findActiveForBuyer(@Param("buyerId") String buyerId, Pageable pageable);
 
-    @Query("{ 'sellerId': ?0, 'sellerDeleted': false }")
-    Page<Conversation> findActiveForSeller(String sellerId, Pageable pageable);
+    @Query("SELECT c FROM Conversation c WHERE c.sellerId = :sellerId AND c.sellerDeleted = false")
+    Page<Conversation> findActiveForSeller(@Param("sellerId") String sellerId, Pageable pageable);
 
-    @Query("{ '$or': [ { 'buyerId': ?0, 'buyerDeleted': false }, { 'sellerId': ?0, 'sellerDeleted': false } ] }")
-    Page<Conversation> findAllActiveForUser(String userId, Pageable pageable);
+    @Query("SELECT c FROM Conversation c WHERE (c.buyerId = :userId AND c.buyerDeleted = false) OR (c.sellerId = :userId AND c.sellerDeleted = false)")
+    Page<Conversation> findAllActiveForUser(@Param("userId") String userId, Pageable pageable);
 
-    @Query("{ '$or': [ { 'buyerId': ?0, 'buyerDeleted': false, 'buyerArchived': false }, { 'sellerId': ?0, 'sellerDeleted': false, 'sellerArchived': false } ] }")
-    Page<Conversation> findAllActiveNonArchivedForUser(String userId, Pageable pageable);
+    @Query("SELECT c FROM Conversation c WHERE (c.buyerId = :userId AND c.buyerDeleted = false AND c.buyerArchived = false) OR (c.sellerId = :userId AND c.sellerDeleted = false AND c.sellerArchived = false)")
+    Page<Conversation> findAllActiveNonArchivedForUser(@Param("userId") String userId, Pageable pageable);
 
-    @Query("{ '$or': [ { 'buyerId': ?0 }, { 'sellerId': ?0 } ], " +
-            "'$and': [ { '$or': [ { 'buyerName': { '$regex': ?1, '$options': 'i' } }, " +
-            "{ 'sellerName': { '$regex': ?1, '$options': 'i' } }, " +
-            "{ 'lastMessage': { '$regex': ?1, '$options': 'i' } } ] } ] }")
-    Page<Conversation> searchForUser(String userId, String keywordRegex, Pageable pageable);
+    @Query("SELECT c FROM Conversation c WHERE " +
+            "(c.buyerId = :userId OR c.sellerId = :userId) AND " +
+            "(LOWER(c.buyerName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+            "LOWER(c.sellerName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+            "LOWER(c.lastMessage) LIKE LOWER(CONCAT('%', :keyword, '%')))")
+    Page<Conversation> searchForUser(@Param("userId") String userId, @Param("keyword") String keyword, Pageable pageable);
 
     long countByBuyerIdAndBuyerDeletedFalseAndBuyerUnreadCountGreaterThan(String buyerId, int threshold);
 

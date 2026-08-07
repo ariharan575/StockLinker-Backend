@@ -1,8 +1,17 @@
 package com.backend.StockLinker.Business_Connection_Service.Services;
 
+import com.backend.StockLinker.Audit_Service.Dto.AuditLogRequest;
+import com.backend.StockLinker.Audit_Service.Entity.AuditLog;
+import com.backend.StockLinker.Audit_Service.Enums.AuditAction;
+import com.backend.StockLinker.Audit_Service.Enums.ResourceType;
+import com.backend.StockLinker.Audit_Service.Services.AuditService;
+import com.backend.StockLinker.Auth_Service.service.IpAddressService;
 import com.backend.StockLinker.Business_Connection_Service.Entity.BusinessConnection;
 import com.backend.StockLinker.Business_Connection_Service.Repository.BusinessConnectionRepository;
 import com.backend.StockLinker.Business_Connection_Service.Dto.NetworkDTO.*;
+import com.backend.StockLinker.Exception.customExceptions.ConflictException;
+import com.backend.StockLinker.Exception.customExceptions.ForbiddenException;
+import com.backend.StockLinker.Exception.customExceptions.ResourceNotFoundException;
 import com.backend.StockLinker.ProductCatagory_Service.Entity.ProductSubCategory;
 import com.backend.StockLinker.ProductCatagory_Service.repository.ProductSubCategoryRepository;
 import com.backend.StockLinker.Profile_Service.model.*;
@@ -10,7 +19,13 @@ import com.backend.StockLinker.Profile_Service.repository.BusinessAddressReposit
 import com.backend.StockLinker.Profile_Service.repository.BusinessProfileRepository;
 import com.backend.StockLinker.Profile_Service.repository.DeliveryConfigurationRepository;
 import com.backend.StockLinker.Profile_Service.repository.SellerProductRepository;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpHeaders;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,7 +34,6 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
@@ -33,9 +47,12 @@ public class NetworkService {
     private final ProductSubCategoryRepository subCategoryRepository;
     private final SimpMessagingTemplate messagingTemplate;
 
-    // Helper method to convert text response time to a rank for hierarchical filtering
+    // Auditing
+    private final AuditService auditService;
+    private final IpAddressService ipAddressService;
+
     private int getResponseRank(String rt) {
-        if (rt == null || rt.isEmpty()) return 99; // Unknown
+        if (rt == null || rt.isEmpty()) return 99;
         String lower = rt.toLowerCase().trim();
         if (lower.contains("< 1 hr") || lower.contains("1 hour")) return 1;
         if (lower.contains("< 24 hrs") || lower.contains("24 hours")) return 2;
@@ -43,95 +60,75 @@ public class NetworkService {
         return 4;
     }
 
-    @Transactional(readOnly = true)
-    public List<NetworkMemberResponse> getNearbyNetwork(
-            String userId, String search, String categoryId, String scope,
-            Double minRating, Integer deliveryRadius, String responseTime) {
+    private List<String> getAllowedResponseTimes(String rt) {
+        if (rt == null || rt.trim().isEmpty()) return new ArrayList<>();
+        int rank = getResponseRank(rt);
+        List<String> allowed = new ArrayList<>();
+        if (rank >= 1) { allowed.add("< 1 hr"); allowed.add("1 hour"); }
+        if (rank >= 2) { allowed.add("< 24 hrs"); allowed.add("24 hours"); }
+        if (rank >= 3) { allowed.add("1-2 days"); }
+        return allowed;
+    }
 
-        BusinessProfile currentUser = profileRepository.findByUserId(userId).orElseThrow();
+    @Transactional(readOnly = true)
+    public Page<NetworkMemberResponse> getNearbyNetwork(
+            String userId, String search, String categoryId, String scope,
+            Double minRating, Integer deliveryRadius, String responseTime, int page, int size) {
+
+        BusinessProfile currentUser = profileRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User profile not found"));
         BusinessAddress currentUserAddress = addressRepository.findByBusinessProfileId(currentUser.getId()).orElse(new BusinessAddress());
 
         String targetRole = currentUser.getBusinessType().equalsIgnoreCase("WHOLESALER") ? "SHOPKEEPER" : "WHOLESALER";
         String userDistrict = currentUserAddress.getDistrict() != null ? currentUserAddress.getDistrict().trim() : "";
 
+        List<String> allowedResponseTimes = getAllowedResponseTimes(responseTime);
+        boolean filterResponseTime = !allowedResponseTimes.isEmpty() && getResponseRank(responseTime) < 4;
+
+        String searchParam = (search != null && !search.trim().isEmpty()) ? "%" + search.toLowerCase() + "%" : null;
+        String categoryIdParam = (categoryId != null && !categoryId.trim().isEmpty()) ? "%" + categoryId + "%" : null;
+        List<String> safeResponseTimes = allowedResponseTimes.isEmpty() ? List.of("DUMMY_VALUE") : allowedResponseTimes;
+
+        Pageable pageLimit = PageRequest.of(page, size);
+
+        // Fetch paginated chunk from database
+        Page<BusinessProfile> filteredUsersPage = profileRepository.findNetworkWithFilters(
+                currentUser.getId(),
+                targetRole,
+                scope != null ? scope.toUpperCase() : "NEARBY",
+                userDistrict,
+                searchParam,
+                minRating,
+                deliveryRadius,
+                categoryIdParam,
+                filterResponseTime,
+                safeResponseTimes,
+                pageLimit
+        );
+
         boolean isScopeAll = "ALL".equalsIgnoreCase(scope);
 
-        List<BusinessProfile> targetProfiles = profileRepository.findAll().stream().filter(p -> {
-            if (p.getId().equals(currentUser.getId())) return false;
+        List<NetworkMemberResponse> content = filteredUsersPage.stream()
+                .map(p -> mapToDto(p, currentUser, isScopeAll ? "Statewide" : "In " + userDistrict, null))
+                .collect(Collectors.toList());
 
-            // 1. Check Role
-            if (!p.getBusinessType().equalsIgnoreCase(targetRole)) return false;
-
-            // 2. Check Scope (NEARBY vs ALL)
-            if (!isScopeAll) {
-                BusinessAddress addr = addressRepository.findByBusinessProfileId(p.getId()).orElse(null);
-                if (addr == null || addr.getDistrict() == null) return false;
-                boolean matchDistrict = addr.getDistrict().trim().equalsIgnoreCase(userDistrict) || addr.getDistrict().equalsIgnoreCase("Universal");
-                if (!matchDistrict) return false;
-            }
-            return true;
-        }).collect(Collectors.toList());
-
-        Stream<BusinessProfile> profileStream = targetProfiles.stream();
-
-        // 3. Search Filter
-        if (search != null && !search.trim().isEmpty()) {
-            String s = search.toLowerCase();
-            profileStream = profileStream.filter(p -> p.getBusinessName().toLowerCase().contains(s));
-        }
-
-        // 4. Rating Filter
-        if (minRating != null) {
-            profileStream = profileStream.filter(p -> p.getRating() != null && p.getRating() >= minRating);
-        }
-
-        // 5. Category DB ID Filter
-        if (categoryId != null && !categoryId.trim().isEmpty()) {
-            profileStream = profileStream.filter(p -> p.getCategoryIds() != null &&
-                    Arrays.asList(p.getCategoryIds().split(",")).contains(categoryId));
-        }
-
-        // 6. Smart Response Time Filter
-        if (responseTime != null && !responseTime.isEmpty()) {
-            int targetRank = getResponseRank(responseTime);
-            profileStream = profileStream.filter(p -> getResponseRank(p.getResponseTime()) <= targetRank);
-        }
-
-        // 7. Delivery Radius Filter (Sellers must cover AT LEAST the requested radius)
-        if (deliveryRadius != null) {
-            profileStream = profileStream.filter(p -> {
-                DeliveryConfiguration delivery = deliveryRepository.findByBusinessProfileId(p.getId()).orElse(null);
-                return delivery != null && delivery.getCoverageRadiusKm() != null && delivery.getCoverageRadiusKm() >= deliveryRadius;
-            });
-        }
-
-        List<BusinessProfile> filteredUsers = profileStream.collect(Collectors.toList());
-
-        // Sort by Trust Score & Creation Date
-        filteredUsers.sort((p1, p2) -> {
+        // Keep the mock user sorting for the current page chunk
+        content.sort((p1, p2) -> {
             boolean isMock1 = p1.getUserId().startsWith("mock");
             boolean isMock2 = p2.getUserId().startsWith("mock");
             if (isMock1 && !isMock2) return 1;
             if (!isMock1 && isMock2) return -1;
-
-            int trust1 = p1.getTrustScore() != null ? p1.getTrustScore() : 0;
-            int trust2 = p2.getTrustScore() != null ? p2.getTrustScore() : 0;
-            if (trust1 != trust2) return Integer.compare(trust2, trust1);
-
-            if (p1.getCreatedAt() != null && p2.getCreatedAt() != null) {
-                return p2.getCreatedAt().compareTo(p1.getCreatedAt());
-            }
             return 0;
         });
 
-        return filteredUsers.stream()
-                .map(p -> mapToDto(p, currentUser, isScopeAll ? "Statewide" : "In " + userDistrict, null))
-                .collect(Collectors.toList());
+        // Return the properly sliced page
+        return new PageImpl<>(content, pageLimit, filteredUsersPage.getTotalElements());
     }
 
-    @Transactional(readOnly = true)
-    public void announceArrivalToDistrict(String userId) {
-        BusinessProfile newProfile = profileRepository.findByUserId(userId).orElseThrow();
+    @Transactional
+    public void announceArrivalToDistrict(String userId, HttpServletRequest request) {
+        BusinessProfile newProfile = profileRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User profile not found"));
         BusinessAddress address = addressRepository.findByBusinessProfileId(newProfile.getId()).orElse(null);
         if (address == null || address.getDistrict() == null) return;
 
@@ -143,15 +140,19 @@ public class NetworkService {
             WsNotification notification = new WsNotification("NEW_NEARBY_USER", newProfile.getBusinessName() + " just joined in your district!", payload);
             messagingTemplate.convertAndSendToUser(peer.getUserId(), "/queue/notifications", notification);
         }
+
+        logAudit(userId, AuditAction.ARRIVAL_ANNOUNCED, "Broadcasted arrival to district: " + address.getDistrict(), request);
     }
 
     @Transactional
-    public void requestConnection(String userId, String partnerProfileId) {
-        BusinessProfile requester = profileRepository.findByUserId(userId).orElseThrow();
-        BusinessProfile receiver = profileRepository.findById(partnerProfileId).orElseThrow();
+    public void requestConnection(String userId, String partnerProfileId, HttpServletRequest request) {
+        BusinessProfile requester = profileRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User profile not found"));
+        BusinessProfile receiver = profileRepository.findById(partnerProfileId)
+                .orElseThrow(() -> new ResourceNotFoundException("Partner profile not found"));
 
         if (connectionRepository.existsByRequesterAndReceiver(requester, receiver) || connectionRepository.existsByRequesterAndReceiver(receiver, requester)) {
-            throw new RuntimeException("Connection request already exists.");
+            throw new ConflictException("Connection request already exists or is connected.");
         }
 
         BusinessConnection connection = BusinessConnection.builder()
@@ -162,14 +163,20 @@ public class NetworkService {
         NetworkMemberResponse payload = mapToDto(requester, receiver, "In District", connection.getId());
         WsNotification notification = new WsNotification("NEW_REQUEST", "New connection request from " + requester.getBusinessName(), payload);
         messagingTemplate.convertAndSendToUser(receiver.getUserId(), "/queue/notifications", notification);
+
+        logAudit(userId, AuditAction.CONNECTION_REQUESTED, "Requested connection with: " + receiver.getId(), request);
     }
 
     @Transactional
-    public void acceptConnection(String userId, String connectionId) {
-        BusinessProfile currentUser = profileRepository.findByUserId(userId).orElseThrow();
-        BusinessConnection connection = connectionRepository.findById(connectionId).orElseThrow();
+    public void acceptConnection(String userId, String connectionId, HttpServletRequest request) {
+        BusinessProfile currentUser = profileRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User profile not found"));
+        BusinessConnection connection = connectionRepository.findById(connectionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Connection not found"));
 
-        if (!connection.getReceiver().getId().equals(currentUser.getId())) throw new RuntimeException("Unauthorized");
+        if (!connection.getReceiver().getId().equals(currentUser.getId())) {
+            throw new ForbiddenException("Unauthorized to accept this connection.");
+        }
 
         connection.setStatus("CONNECTED");
         connection.setConnectedAt(LocalDateTime.now());
@@ -178,6 +185,8 @@ public class NetworkService {
         NetworkMemberResponse payload = mapToDto(currentUser, connection.getRequester(), "Connected Partner", connection.getId());
         WsNotification notification = new WsNotification("ACCEPTED", currentUser.getBusinessName() + " accepted your request!", payload);
         messagingTemplate.convertAndSendToUser(connection.getRequester().getUserId(), "/queue/notifications", notification);
+
+        logAudit(userId, AuditAction.CONNECTION_ACCEPTED, "Accepted connection from: " + connection.getRequester().getId(), request);
     }
 
     @Transactional(readOnly = true)
@@ -200,9 +209,30 @@ public class NetworkService {
         }).collect(Collectors.toList());
     }
 
+    private void logAudit(String userId, AuditAction action, String details, HttpServletRequest request) {
+        String ip = (request != null) ? ipAddressService.getClientIp(request) : "Unknown";
+        String userAgent = (request != null) ? request.getHeader(HttpHeaders.USER_AGENT) : "Unknown";
+        String deviceId = (request != null) ? (String) request.getAttribute("deviceId") : "Unknown";
+
+        auditService.log(AuditLogRequest.builder()
+                .userId(userId)
+                .action(action)
+                .resourceType(ResourceType.NETWORK)
+                .ipAddress(ip)
+                .userAgent(userAgent)
+                .deviceId(deviceId)
+                .status(AuditLog.Status.SUCCESS)
+                .newValue(details)
+                .build());
+    }
+
+    // Keep mapToDto exactly as you had it
     private NetworkMemberResponse mapToDto(BusinessProfile profile, BusinessProfile currentUser, String distanceLabel, String connectionId) {
-        BusinessAddress address = addressRepository.findByBusinessProfileId(profile.getId()).orElse(new BusinessAddress());
-        DeliveryConfiguration delivery = deliveryRepository.findByBusinessProfileId(profile.getId()).orElse(new DeliveryConfiguration());
+        BusinessAddress address = profile.getBusinessAddress() != null ? profile.getBusinessAddress() :
+                addressRepository.findByBusinessProfileId(profile.getId()).orElse(new BusinessAddress());
+
+        DeliveryConfiguration delivery = profile.getDeliveryConfiguration() != null ? profile.getDeliveryConfiguration() :
+                deliveryRepository.findByBusinessProfileId(profile.getId()).orElse(new DeliveryConfiguration());
 
         String mainCategory = "General Business";
         List<ProductSubCategory> subCats = new ArrayList<>();

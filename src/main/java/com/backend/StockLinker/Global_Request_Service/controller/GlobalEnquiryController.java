@@ -2,6 +2,7 @@ package com.backend.StockLinker.Global_Request_Service.controller;
 
 import com.backend.StockLinker.Global_Request_Service.Dto.EnquiryResponseDto;
 import com.backend.StockLinker.Global_Request_Service.service.GlobalEnquiryService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -25,8 +26,9 @@ public class GlobalEnquiryController {
     @PostMapping("/{enquiryId}/accept")
     public ResponseEntity<Map<String, String>> acceptEnquiryAsOrder(
             @PathVariable String enquiryId,
-            Authentication authentication) {
-        globalEnquiryService.acceptEnquiryAsOrder(enquiryId, authentication.getName());
+            Authentication authentication,
+            HttpServletRequest request) {
+        globalEnquiryService.acceptEnquiryAsOrder(enquiryId, authentication.getName(), request);
         return ResponseEntity.ok(Map.of("message", "Order accepted and is now processing."));
     }
 }

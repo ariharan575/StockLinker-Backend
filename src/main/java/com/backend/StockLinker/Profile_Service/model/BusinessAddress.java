@@ -1,6 +1,7 @@
 package com.backend.StockLinker.Profile_Service.model;
 
 import com.backend.StockLinker.Auth_Service.model.BaseEntity;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
@@ -16,6 +17,7 @@ public class BusinessAddress extends BaseEntity {
 
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "business_profile_id", nullable = false, unique = true)
+    @JsonIgnore
     private BusinessProfile businessProfile;
 
     @Column(name = "address" , length = 255)

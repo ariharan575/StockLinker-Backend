@@ -44,12 +44,6 @@
 			<scope>runtime</scope>
 		</dependency>
 
-		<!-- MongoDB -->
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-data-mongodb</artifactId>
-		</dependency>
-
 		<!-- Spring Security -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -127,20 +121,6 @@
 			<artifactId>jackson-databind</artifactId>
 		</dependency>
 
-		<!-- Device Finder -->
-		<dependency>
-			<groupId>nl.basjes.parse.useragent</groupId>
-			<artifactId>yauaa</artifactId>
-			<version>7.28.0</version>
-		</dependency>
-
-		<!-- OpenAPI -->
-		<dependency>
-			<groupId>org.springdoc</groupId>
-			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
-			<version>2.5.0</version>
-		</dependency>
-
 		<!-- websocket -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -150,11 +130,6 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-jpa-test</artifactId>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-data-mongodb-test</artifactId>
 			<scope>test</scope>
 		</dependency>
 		<dependency>

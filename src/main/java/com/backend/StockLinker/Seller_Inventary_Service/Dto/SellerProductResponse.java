@@ -8,7 +8,6 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-// 1. Updated Response DTO
 @Data
 @Builder
 @NoArgsConstructor

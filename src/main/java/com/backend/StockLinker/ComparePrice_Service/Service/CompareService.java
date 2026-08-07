@@ -1,19 +1,26 @@
 package com.backend.StockLinker.ComparePrice_Service.Service;
 
+import com.backend.StockLinker.Audit_Service.Dto.AuditLogRequest;
+import com.backend.StockLinker.Audit_Service.Entity.AuditLog;
+import com.backend.StockLinker.Audit_Service.Enums.AuditAction;
+import com.backend.StockLinker.Audit_Service.Enums.ResourceType;
+import com.backend.StockLinker.Audit_Service.Services.AuditService;
+import com.backend.StockLinker.Auth_Service.service.IpAddressService;
 import com.backend.StockLinker.ComparePrice_Service.dto.*;
-import com.backend.StockLinker.Exception.BaseException;
-import com.backend.StockLinker.Exception.ErrorCode;
+import com.backend.StockLinker.Exception.customExceptions.ResourceNotFoundException;
 import com.backend.StockLinker.Global_Request_Service.Dto.GlobalEnquiryRequest;
 import com.backend.StockLinker.Global_Request_Service.Entity.GlobalEnquiry;
 import com.backend.StockLinker.Global_Request_Service.Repository.GlobalEnquiryRepository;
-import com.backend.StockLinker.Products_Service.Dto.*;
 import com.backend.StockLinker.Profile_Service.model.BusinessProfile;
 import com.backend.StockLinker.Profile_Service.model.MasterProduct;
 import com.backend.StockLinker.Profile_Service.model.SellerProduct;
 import com.backend.StockLinker.Profile_Service.repository.BusinessProfileRepository;
 import com.backend.StockLinker.Profile_Service.repository.MasterProductRepository;
 import com.backend.StockLinker.Profile_Service.repository.SellerProductRepository;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +29,7 @@ import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -33,13 +41,16 @@ public class CompareService {
     private final MasterProductRepository masterProductRepository;
     private final GlobalEnquiryRepository globalEnquiryRepository;
 
+    // Auditing
+    private final AuditService auditService;
+    private final IpAddressService ipAddressService;
+
     @Transactional(readOnly = true)
     public ComparePageResponseDto getCompareData(String masterProductId, int requestedQty) {
 
         List<SellerProduct> allSellers = sellerProductRepository.findActiveByMasterProductId(masterProductId);
         if (allSellers.isEmpty()) {
-            // FIX: Replaced RuntimeException with your custom BaseException
-            throw new BaseException(ErrorCode.RESOURCE_NOT_FOUND, "No active sellers found for this product.");
+            throw new ResourceNotFoundException("No active sellers found for this product.");
         }
 
         MasterProduct masterProduct = allSellers.get(0).getMasterProduct();
@@ -57,11 +68,16 @@ public class CompareService {
             return ComparePageResponseDto.builder().marketBoundaries(boundaries).build();
         }
 
+        // Bulk fetch all Business Profiles in 1 query to prevent N+1 loop
+        List<String> profileIds = validSellers.stream().map(SellerProduct::getBusinessProfileId).distinct().collect(Collectors.toList());
+        Map<String, BusinessProfile> profileMap = businessProfileRepository.findAllById(profileIds)
+                .stream().collect(Collectors.toMap(BusinessProfile::getId, p -> p));
+
         BigDecimal totalMarketPriceSum = BigDecimal.ZERO;
         List<SupplierDto> supplierDtos = new ArrayList<>();
 
         for (SellerProduct sp : validSellers) {
-            BusinessProfile bp = businessProfileRepository.findById(sp.getBusinessProfileId()).orElse(null);
+            BusinessProfile bp = profileMap.get(sp.getBusinessProfileId());
             if (bp == null) continue;
 
             BigDecimal calculatedTotalPrice;
@@ -155,7 +171,7 @@ public class CompareService {
                 .top3Matrix(matrixDtos)
                 .build();
 
-        List<VolumeUpsellDto> aiDeals = generateAiVolumeDeals(allSellers, requestedQty, marketAverageTotal);
+        List<VolumeUpsellDto> aiDeals = generateAiVolumeDeals(allSellers, requestedQty, marketAverageTotal, profileMap);
 
         return ComparePageResponseDto.builder()
                 .headerMetrics(headerMetrics)
@@ -168,28 +184,17 @@ public class CompareService {
 
     @Transactional(readOnly = true)
     public ComparePageResponseDto getDashboardHighlight() {
-        List<MasterProduct> allProducts = masterProductRepository.findAll();
-        if (allProducts.isEmpty()) {
+        long totalActiveProducts = masterProductRepository.countProductsWithActiveSellers();
+
+        if (totalActiveProducts == 0) {
             return ComparePageResponseDto.builder().build();
         }
-
-        List<MasterProduct> productsWithSellers = new ArrayList<>();
-        for (MasterProduct mp : allProducts) {
-            if (!sellerProductRepository.findActiveByMasterProductId(mp.getId()).isEmpty()) {
-                productsWithSellers.add(mp);
-            }
-        }
-
-        if (productsWithSellers.isEmpty()) {
-            return ComparePageResponseDto.builder().build();
-        }
-
-        productsWithSellers.sort(java.util.Comparator.comparing(MasterProduct::getId));
 
         int dayOfYear = java.time.LocalDate.now().getDayOfYear();
-        int rotationIndex = dayOfYear % productsWithSellers.size();
+        int rotationIndex = dayOfYear % (int) totalActiveProducts;
 
-        MasterProduct dailyProduct = productsWithSellers.get(rotationIndex);
+        MasterProduct dailyProduct = masterProductRepository.findProductsWithActiveSellers(PageRequest.of(rotationIndex, 1))
+                .getContent().get(0);
 
         List<SellerProduct> sellers = sellerProductRepository.findActiveByMasterProductId(dailyProduct.getId());
         int safeQty = sellers.stream()
@@ -202,37 +207,31 @@ public class CompareService {
 
     @Transactional(readOnly = true)
     public List<FeaturedComparisonDto> getDailyFeaturedComparisons() {
-        List<MasterProduct> allProducts = masterProductRepository.findAll();
+        long totalActiveProducts = masterProductRepository.countProductsWithActiveSellers();
 
-        List<MasterProduct> productsWithSellers = new ArrayList<>();
-        for (MasterProduct mp : allProducts) {
-            if (!sellerProductRepository.findActiveByMasterProductId(mp.getId()).isEmpty()) {
-                productsWithSellers.add(mp);
-            }
-        }
-
-        if (productsWithSellers.isEmpty()) {
+        if (totalActiveProducts == 0) {
             return new ArrayList<>();
         }
 
-        productsWithSellers.sort(java.util.Comparator.comparing(MasterProduct::getId));
-        int dayOfYear = java.time.LocalDate.now().getDayOfYear();
+        int totalPages = (int) Math.ceil((double) totalActiveProducts / 4);
+        int pageIndex = java.time.LocalDate.now().getDayOfYear() % totalPages;
 
+        List<MasterProduct> dailyProducts = masterProductRepository.findProductsWithActiveSellers(PageRequest.of(pageIndex, 4)).getContent();
         List<FeaturedComparisonDto> result = new ArrayList<>();
-        int startIndex = dayOfYear % productsWithSellers.size();
 
-        for (int i = 0; i < Math.min(4, productsWithSellers.size()); i++) {
-            int currentIndex = (startIndex + i) % productsWithSellers.size();
-            MasterProduct mp = productsWithSellers.get(currentIndex);
+        for (MasterProduct mp : dailyProducts) {
             List<SellerProduct> sellers = sellerProductRepository.findActiveByMasterProductId(mp.getId());
-
             sellers.sort(java.util.Comparator.comparing(SellerProduct::getPrice));
+
+            List<String> profileIds = sellers.stream().limit(3).map(SellerProduct::getBusinessProfileId).collect(Collectors.toList());
+            Map<String, BusinessProfile> profileMap = businessProfileRepository.findAllById(profileIds)
+                    .stream().collect(Collectors.toMap(BusinessProfile::getId, p -> p));
 
             List<FeaturedComparisonDto.FeaturedSupplierDto> supplierDtos = new ArrayList<>();
             int limit = Math.min(3, sellers.size());
             for (int j = 0; j < limit; j++) {
                 SellerProduct sp = sellers.get(j);
-                BusinessProfile bp = businessProfileRepository.findById(sp.getBusinessProfileId()).orElse(null);
+                BusinessProfile bp = profileMap.get(sp.getBusinessProfileId());
                 if (bp != null) {
                     supplierDtos.add(FeaturedComparisonDto.FeaturedSupplierDto.builder()
                             .name(bp.getBusinessName())
@@ -253,7 +252,7 @@ public class CompareService {
         return result;
     }
 
-    private List<VolumeUpsellDto> generateAiVolumeDeals(List<SellerProduct> allSellers, int requestedQty, BigDecimal marketAverageTotal) {
+    private List<VolumeUpsellDto> generateAiVolumeDeals(List<SellerProduct> allSellers, int requestedQty, BigDecimal marketAverageTotal, Map<String, BusinessProfile> profileMap) {
         List<VolumeUpsellDto> upsells = new ArrayList<>();
 
         List<SellerProduct> bulkDealers = allSellers.stream()
@@ -261,7 +260,7 @@ public class CompareService {
                 .collect(Collectors.toList());
 
         for (SellerProduct sp : bulkDealers) {
-            BusinessProfile bp = businessProfileRepository.findById(sp.getBusinessProfileId()).orElse(null);
+            BusinessProfile bp = profileMap.get(sp.getBusinessProfileId());
             if (bp == null) continue;
 
             BigDecimal extrapolatedAverage = marketAverageTotal.divide(BigDecimal.valueOf(requestedQty), 2, RoundingMode.HALF_UP)
@@ -292,10 +291,9 @@ public class CompareService {
     }
 
     @Transactional
-    public void submitEnquiry(GlobalEnquiryRequest request, String buyerId) {
+    public void submitEnquiry(GlobalEnquiryRequest request, String buyerId, HttpServletRequest httpRequest) {
         MasterProduct masterProduct = masterProductRepository.findById(request.getMasterProductId())
-                // FIX: Replaced RuntimeException with your custom BaseException here as well
-                .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND, "Product not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
 
         GlobalEnquiry enquiry = GlobalEnquiry.builder()
                 .buyerId(buyerId)
@@ -307,5 +305,24 @@ public class CompareService {
                 .build();
 
         globalEnquiryRepository.save(enquiry);
+
+        logAudit(buyerId, AuditAction.ENQUIRY_SUBMITTED, "Submitted global enquiry for product: " + masterProduct.getProductName(), httpRequest);
+    }
+
+    private void logAudit(String userId, AuditAction action, String details, HttpServletRequest request) {
+        String ip = (request != null) ? ipAddressService.getClientIp(request) : "Unknown";
+        String userAgent = (request != null) ? request.getHeader(HttpHeaders.USER_AGENT) : "Unknown";
+        String deviceId = (request != null) ? (String) request.getAttribute("deviceId") : "Unknown";
+
+        auditService.log(AuditLogRequest.builder()
+                .userId(userId)
+                .action(action)
+                .resourceType(ResourceType.ENQUIRY)
+                .ipAddress(ip)
+                .userAgent(userAgent)
+                .deviceId(deviceId)
+                .status(AuditLog.Status.SUCCESS)
+                .newValue(details)
+                .build());
     }
 }

@@ -1,6 +1,7 @@
 package com.backend.StockLinker.Profile_Service.model;
 
 import com.backend.StockLinker.Auth_Service.model.BaseEntity;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
@@ -32,6 +33,7 @@ public class SellerProduct extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "master_product_id", nullable = false)
+    @JsonIgnore
     private MasterProduct masterProduct;
 
     @Column(name = "product_name", nullable = false, length = 150)

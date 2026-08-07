@@ -21,7 +21,6 @@ public class OnboardingController {
 
     private final OnboardingService onboardingService;
 
-    // --- NEW: Fetch Categories for Frontend ---
     @GetMapping("/categories")
     public ResponseEntity<ApiResponse<List<CategoryResponseDto>>> getActiveCategories() {
         return ResponseEntity.ok(ApiResponse.success("Categories fetched successfully", onboardingService.getActiveCategories()));

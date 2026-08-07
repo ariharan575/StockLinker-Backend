@@ -2,6 +2,7 @@ package com.backend.StockLinker.Seller_Inventary_Service.Repository;
 
 import com.backend.StockLinker.Profile_Service.model.SellerProduct;
 import org.springframework.data.jpa.domain.Specification;
+import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import java.util.ArrayList;
 import java.util.List;
@@ -12,6 +13,15 @@ public class SellerProductSpecification {
             String sellerId, String search, String category, String brand, String availability) {
 
         return (root, query, criteriaBuilder) -> {
+
+            // FIX: Force Hibernate to fetch all nested data in 1 single query (prevents N+1)
+            // We check if it is not a count query, because fetch is not allowed in count queries
+            if (Long.class != query.getResultType() && long.class != query.getResultType()) {
+                root.fetch("masterProduct", JoinType.LEFT)
+                        .fetch("productSubCategory", JoinType.LEFT)
+                        .fetch("productCategory", JoinType.LEFT);
+            }
+
             List<Predicate> predicates = new ArrayList<>();
 
             predicates.add(criteriaBuilder.equal(root.get("sellerId"), sellerId));

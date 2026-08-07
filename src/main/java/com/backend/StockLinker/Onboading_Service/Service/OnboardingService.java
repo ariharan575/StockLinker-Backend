@@ -4,8 +4,8 @@ import com.backend.StockLinker.Audit_Service.Dto.AuditLogRequest;
 import com.backend.StockLinker.Auth_Service.enums.AccountStatus;
 import com.backend.StockLinker.Audit_Service.Enums.AuditAction;
 import com.backend.StockLinker.Audit_Service.Enums.ResourceType;
-import com.backend.StockLinker.Exception.BaseException;
-import com.backend.StockLinker.Exception.ErrorCode;
+import com.backend.StockLinker.Exception.customExceptions.BadRequestException;
+import com.backend.StockLinker.Exception.customExceptions.ResourceNotFoundException;
 import com.backend.StockLinker.Audit_Service.Entity.AuditLog;
 import com.backend.StockLinker.Auth_Service.model.User;
 import com.backend.StockLinker.Auth_Service.repository.UserRepository;
@@ -57,10 +57,10 @@ public class OnboardingService {
     private User getPendingUser() {
         String userId = SecurityContextHolder.getContext().getAuthentication().getName();
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND, "User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         if (user.getAccountStatus() != AccountStatus.PENDING_ONBOARDING) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "User is not in onboarding state or has already completed onboarding.");
+            throw new BadRequestException("User is not in onboarding state or has already completed onboarding.");
         }
         return user;
     }
@@ -95,7 +95,6 @@ public class OnboardingService {
         profile.setBusinessEmail(dto.getBusinessEmail());
         profile.setGstNumber(dto.getGstNumber());
 
-        // Dynamically save WhatsApp number if Role is SHOPKEEPER
         if ("SHOPKEEPER".equalsIgnoreCase(roleName)) {
             profile.setYearsInBusiness(dto.getYearsInBusiness());
         }
@@ -104,7 +103,6 @@ public class OnboardingService {
 
         final BusinessProfile savedProfile = profile;
 
-        // 🚀 Save Delivery Radius only if Role is WHOLESALER
         if ("WHOLESALER".equalsIgnoreCase(roleName)) {
             DeliveryConfiguration delivery = deliveryRepository.findByBusinessProfileId(savedProfile.getId())
                     .orElseGet(() -> {
@@ -123,7 +121,7 @@ public class OnboardingService {
     public void saveAddressInfo(AddressInfoRequestDto dto, HttpServletRequest request) {
         User user = getPendingUser();
         BusinessProfile profile = businessProfileRepository.findByUserId(user.getId())
-                .orElseThrow(() -> new BaseException(ErrorCode.BAD_REQUEST, "Please complete Step 1 (Business Details) first."));
+                .orElseThrow(() -> new BadRequestException("Please complete Step 1 (Business Details) first."));
 
         BusinessAddress address = businessAddressRepository.findByBusinessProfileId(profile.getId())
                 .orElseGet(() -> {
@@ -137,7 +135,7 @@ public class OnboardingService {
         address.setArea(dto.getArea());
         address.setCity(dto.getCityOrTown());
         address.setDistrict(dto.getDistrict());
-        address.setState("Tamil Nadu"); // Force Tamil Nadu automatically
+        address.setState("Tamil Nadu");
         address.setPincode(dto.getPincode());
 
         businessAddressRepository.save(address);
@@ -148,7 +146,7 @@ public class OnboardingService {
     public void saveMarketplaceInfo(MarketplaceInfoRequestDto dto, HttpServletRequest request) {
         User user = getPendingUser();
         BusinessProfile profile = businessProfileRepository.findByUserId(user.getId())
-                .orElseThrow(() -> new BaseException(ErrorCode.BAD_REQUEST, "Please complete previous steps first."));
+                .orElseThrow(() -> new BadRequestException("Please complete previous steps first."));
 
         if (dto.getCategoryIds() != null && !dto.getCategoryIds().isEmpty()) {
             String joinedIds = String.join(",", dto.getCategoryIds());

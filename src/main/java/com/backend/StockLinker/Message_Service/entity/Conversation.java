@@ -2,30 +2,21 @@ package com.backend.StockLinker.Message_Service.entity;
 
 import com.backend.StockLinker.Message_Service.enums.ConversationStatus;
 import com.backend.StockLinker.Message_Service.enums.MessageType;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.springframework.data.annotation.CreatedDate;
-import org.springframework.data.annotation.Id;
-import org.springframework.data.annotation.LastModifiedDate;
-import org.springframework.data.mongodb.core.index.CompoundIndex;
-import org.springframework.data.mongodb.core.index.CompoundIndexes;
-import org.springframework.data.mongodb.core.index.Indexed;
-import org.springframework.data.mongodb.core.mapping.Document;
-import org.springframework.data.mongodb.core.mapping.Field;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.Instant;
 
-/**
- * A one-to-one Buyer <-> Seller conversation thread.
- * One Conversation document exists per unique (buyerId, sellerId) pair.
- */
-@Document(collection = "conversation")
-@CompoundIndexes({
-        @CompoundIndex(name = "buyer_seller_unique_idx", def = "{'buyerId': 1, 'sellerId': 1}", unique = true),
-        @CompoundIndex(name = "buyer_lastMessageAt_idx", def = "{'buyerId': 1, 'lastMessageAt': -1}"),
-        @CompoundIndex(name = "seller_lastMessageAt_idx", def = "{'sellerId': 1, 'lastMessageAt': -1}")
+@Entity
+@Table(name = "conversation", indexes = {
+        @Index(name = "buyer_seller_unique_idx", columnList = "buyer_id, seller_id", unique = true),
+        @Index(name = "buyer_lastMessageAt_idx", columnList = "buyer_id, last_message_at DESC"),
+        @Index(name = "seller_lastMessageAt_idx", columnList = "seller_id, last_message_at DESC")
 })
 @Data
 @Builder
@@ -34,113 +25,110 @@ import java.time.Instant;
 public class Conversation {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
     private String id;
 
-    @Field("conversationCode")
-    @Indexed(unique = true)
+    @Column(name = "conversation_code", unique = true)
     private String conversationCode;
 
-    @Field("buyerId")
-    @Indexed
+    @Column(name = "buyer_id")
     private String buyerId;
 
-    @Field("sellerId")
-    @Indexed
+    @Column(name = "seller_id")
     private String sellerId;
 
-    @Field("buyerName")
+    @Column(name = "buyer_name")
     private String buyerName;
 
-    @Field("sellerName")
+    @Column(name = "seller_name")
     private String sellerName;
 
-    @Field("buyerBusinessName")
+    @Column(name = "buyer_business_name")
     private String buyerBusinessName;
 
-    @Field("sellerBusinessName")
+    @Column(name = "seller_business_name")
     private String sellerBusinessName;
 
-    @Field("buyerProfileImage")
+    @Column(name = "buyer_profile_image")
     private String buyerProfileImage;
 
-    @Field("sellerProfileImage")
+    @Column(name = "seller_profile_image")
     private String sellerProfileImage;
 
-    @Field("lastMessage")
+    @Column(name = "last_message", columnDefinition = "TEXT")
     private String lastMessage;
 
-    @Field("lastMessageSenderId")
+    @Column(name = "last_message_sender_id")
     private String lastMessageSenderId;
 
-    @Field("lastMessageType")
+    @Enumerated(EnumType.STRING)
+    @Column(name = "last_message_type")
     private MessageType lastMessageType;
 
-    @Field("lastMessageAt")
-    @Indexed
+    @Column(name = "last_message_at")
     private Instant lastMessageAt;
 
-    @Field("buyerUnreadCount")
     @Builder.Default
+    @Column(name = "buyer_unread_count", nullable = false)
     private int buyerUnreadCount = 0;
 
-    @Field("sellerUnreadCount")
     @Builder.Default
+    @Column(name = "seller_unread_count", nullable = false)
     private int sellerUnreadCount = 0;
 
-    @Field("buyerArchived")
     @Builder.Default
+    @Column(name = "buyer_archived", nullable = false)
     private boolean buyerArchived = false;
 
-    @Field("sellerArchived")
     @Builder.Default
+    @Column(name = "seller_archived", nullable = false)
     private boolean sellerArchived = false;
 
-    @Field("buyerDeleted")
     @Builder.Default
+    @Column(name = "buyer_deleted", nullable = false)
     private boolean buyerDeleted = false;
 
-    @Field("sellerDeleted")
     @Builder.Default
+    @Column(name = "seller_deleted", nullable = false)
     private boolean sellerDeleted = false;
 
-    @Field("buyerBlocked")
     @Builder.Default
+    @Column(name = "buyer_blocked", nullable = false)
     private boolean buyerBlocked = false;
 
-    @Field("sellerBlocked")
     @Builder.Default
+    @Column(name = "seller_blocked", nullable = false)
     private boolean sellerBlocked = false;
 
-    @Field("active")
     @Builder.Default
+    @Column(name = "active", nullable = false)
     private boolean active = true;
 
-    @Field("status")
+    @Enumerated(EnumType.STRING)
     @Builder.Default
+    @Column(name = "status")
     private ConversationStatus status = ConversationStatus.ACTIVE;
 
-    @CreatedDate
-    @Field("createdAt")
+    @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
     private Instant createdAt;
 
-    @LastModifiedDate
-    @Field("updatedAt")
+    @UpdateTimestamp
+    @Column(name = "updated_at")
     private Instant updatedAt;
 
-    /**
-     * Returns the counterpart user id for a given user id in this conversation.
-     */
     public String otherPartyId(String userId) {
-        if (buyerId.equals(userId)) {
+        if (buyerId != null && buyerId.equals(userId)) {
             return sellerId;
         }
-        if (sellerId.equals(userId)) {
+        if (sellerId != null && sellerId.equals(userId)) {
             return buyerId;
         }
         return null;
     }
 
     public boolean isParticipant(String userId) {
-        return buyerId.equals(userId) || sellerId.equals(userId);
+        return (buyerId != null && buyerId.equals(userId)) ||
+                (sellerId != null && sellerId.equals(userId));
     }
 }

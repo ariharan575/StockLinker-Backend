@@ -2,6 +2,7 @@ package com.backend.StockLinker.Order_Service.controller;
 
 import com.backend.StockLinker.Order_Service.dto.*;
 import com.backend.StockLinker.Order_Service.service.OrderService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -21,8 +22,11 @@ public class OrderController {
     private final OrderService orderService;
 
     @PostMapping
-    public ResponseEntity<?> placeOrder(@RequestBody OrderRequestDto request, Authentication auth) {
-        orderService.placeOrder(auth.getName(), request);
+    public ResponseEntity<?> placeOrder(
+            @RequestBody OrderRequestDto request,
+            Authentication auth,
+            HttpServletRequest httpRequest) {
+        orderService.placeOrder(auth.getName(), request, httpRequest);
         return ResponseEntity.ok(Map.of("message", "Order placed successfully"));
     }
 
@@ -31,7 +35,6 @@ public class OrderController {
             @RequestParam(required = false, defaultValue = "all") String status,
             Authentication auth) {
 
-        // 1. Extract role from JWT authorities statelessly
         String userRole = auth.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .filter(a -> a.startsWith("ROLE_"))
@@ -39,10 +42,8 @@ public class OrderController {
                 .orElse("ROLE_SHOPKEEPER")
                 .replace("ROLE_", "");
 
-        // 2. Fetch the actual orders
         List<OrderResponseDto> orders = orderService.getOrdersForUser(auth.getName(), userRole, status);
 
-        // 3. Package both into the existing OrderListResponseDto
         OrderListResponseDto responseDto = OrderListResponseDto.builder()
                 .userRole(userRole)
                 .orders(orders)
@@ -55,8 +56,9 @@ public class OrderController {
     public ResponseEntity<?> acceptAndSchedule(
             @PathVariable String orderId,
             @RequestBody OrderActionDtos.ScheduleOrderDto scheduleDto,
-            Authentication auth) {
-        orderService.acceptAndScheduleOrder(orderId, auth.getName(), scheduleDto);
+            Authentication auth,
+            HttpServletRequest httpRequest) {
+        orderService.acceptAndScheduleOrder(orderId, auth.getName(), scheduleDto, httpRequest);
         return ResponseEntity.ok(Map.of("message", "Order accepted and delivery scheduled"));
     }
 
@@ -64,8 +66,9 @@ public class OrderController {
     public ResponseEntity<?> rejectOrder(
             @PathVariable String orderId,
             @RequestBody OrderActionDtos.RejectOrderDto rejectDto,
-            Authentication auth) {
-        orderService.rejectOrder(orderId, auth.getName(), rejectDto);
+            Authentication auth,
+            HttpServletRequest httpRequest) {
+        orderService.rejectOrder(orderId, auth.getName(), rejectDto, httpRequest);
         return ResponseEntity.ok(Map.of("message", "Order rejected successfully"));
     }
 
@@ -79,27 +82,34 @@ public class OrderController {
     @PutMapping("/route/sequence")
     public ResponseEntity<?> updateRouteSequence(
             @RequestBody OrderActionDtos.UpdateSequenceDto sequenceDto,
-            Authentication auth) {
-        orderService.updateDeliverySequence(auth.getName(), sequenceDto);
+            Authentication auth,
+            HttpServletRequest httpRequest) {
+        orderService.updateDeliverySequence(auth.getName(), sequenceDto, httpRequest);
         return ResponseEntity.ok(Map.of("message", "Delivery route sequence saved"));
     }
 
     @PostMapping("/route/start")
     public ResponseEntity<?> startRouteForDate(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-            Authentication auth) {
-        orderService.startRouteForDate(auth.getName(), date);
+            Authentication auth,
+            HttpServletRequest httpRequest) {
+        orderService.startRouteForDate(auth.getName(), date, httpRequest);
         return ResponseEntity.ok(Map.of("message", "Route started successfully"));
     }
 
     @PostMapping("/{orderId}/deliver")
-    public ResponseEntity<?> markAsDelivered(@PathVariable String orderId, Authentication auth) {
-        orderService.markAsDelivered(orderId, auth.getName());
+    public ResponseEntity<?> markAsDelivered(
+            @PathVariable String orderId,
+            Authentication auth,
+            HttpServletRequest httpRequest) {
+        orderService.markAsDelivered(orderId, auth.getName(), httpRequest);
         return ResponseEntity.ok(Map.of("message", "Order marked as delivered"));
     }
 
     @GetMapping("/{orderId}/route")
-    public ResponseEntity<List<Map<String, Object>>> getDeliveryRoute(@PathVariable String orderId, Authentication auth) {
+    public ResponseEntity<List<Map<String, Object>>> getDeliveryRoute(
+            @PathVariable String orderId,
+            Authentication auth) {
         return ResponseEntity.ok(orderService.getActiveDeliveryRoute(orderId, auth.getName()));
     }
 

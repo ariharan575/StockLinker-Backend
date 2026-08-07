@@ -26,10 +26,12 @@ public interface SellerProductRepository extends JpaRepository<SellerProduct, St
 
     long countByBusinessProfileIdAndAvailableStockLessThan(String businessProfileId, Integer stockLimit);
 
-    // Added this new query to count sellers for a specific category
     @Query("SELECT COUNT(DISTINCT sp.sellerId) FROM SellerProduct sp WHERE sp.masterProduct.productSubCategory.productCategory.id = :categoryId AND sp.status = 'ACTIVE'")
     long countDistinctSellersByCategoryId(@Param("categoryId") String categoryId);
 
-    // Add this to your existing SellerProductRepository
     long countByBusinessProfileIdAndStatus(String businessProfileId, String status);
+
+    // NEW FIX: Fetch all category counts at the exact same time to avoid loops
+    @Query("SELECT sp.masterProduct.productSubCategory.productCategory.id, COUNT(DISTINCT sp.sellerId) FROM SellerProduct sp WHERE sp.status = 'ACTIVE' GROUP BY sp.masterProduct.productSubCategory.productCategory.id")
+    List<Object[]> countDistinctSellersGroupByCategory();
 }

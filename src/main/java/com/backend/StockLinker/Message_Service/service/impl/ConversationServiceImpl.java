@@ -1,5 +1,14 @@
 package com.backend.StockLinker.Message_Service.service.impl;
 
+import com.backend.StockLinker.Audit_Service.Dto.AuditLogRequest;
+import com.backend.StockLinker.Audit_Service.Entity.AuditLog;
+import com.backend.StockLinker.Audit_Service.Enums.AuditAction;
+import com.backend.StockLinker.Audit_Service.Enums.ResourceType;
+import com.backend.StockLinker.Audit_Service.Services.AuditService;
+import com.backend.StockLinker.Auth_Service.service.IpAddressService;
+import com.backend.StockLinker.Exception.customExceptions.BadRequestException;
+import com.backend.StockLinker.Exception.customExceptions.ForbiddenException;
+import com.backend.StockLinker.Exception.customExceptions.ResourceNotFoundException;
 import com.backend.StockLinker.Message_Service.dto.request.ConversationSearchRequest;
 import com.backend.StockLinker.Message_Service.dto.request.CreateConversationRequest;
 import com.backend.StockLinker.Message_Service.dto.response.ConversationListResponse;
@@ -13,15 +22,20 @@ import com.backend.StockLinker.Message_Service.security.CurrentUserProvider;
 import com.backend.StockLinker.Message_Service.service.ConversationService;
 import com.backend.StockLinker.Profile_Service.model.BusinessProfile;
 import com.backend.StockLinker.Profile_Service.repository.BusinessProfileRepository;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.web.context.request.RequestAttributes;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.time.Instant;
 import java.util.List;
@@ -37,6 +51,17 @@ public class ConversationServiceImpl implements ConversationService {
     private final CurrentUserProvider currentUserProvider;
     private final BusinessProfileRepository profileRepository;
 
+    private final AuditService auditService;
+    private final IpAddressService ipAddressService;
+
+    private HttpServletRequest getCurrentHttpRequest() {
+        RequestAttributes attrs = RequestContextHolder.getRequestAttributes();
+        if (attrs instanceof ServletRequestAttributes) {
+            return ((ServletRequestAttributes) attrs).getRequest();
+        }
+        return null;
+    }
+
     @Override
     @Transactional
     public ConversationResponse createOrGetConversation(CreateConversationRequest request) {
@@ -44,10 +69,9 @@ public class ConversationServiceImpl implements ConversationService {
         UserRole currentRole = currentUserProvider.getCurrentUserRole();
 
         if (currentUserId.equals(request.getCounterpartId())) {
-            throw new IllegalArgumentException("Cannot start a conversation with yourself");
+            throw new BadRequestException("Cannot start a conversation with yourself");
         }
 
-        // FETCH CURRENT USER'S REAL DETAILS TO PREVENT "UNKNOWN" BUG
         BusinessProfile myProfile = profileRepository.findByUserId(currentUserId).orElse(null);
         String myName = (myProfile != null && myProfile.getBusinessName() != null) ? myProfile.getBusinessName() : "User";
         String myBusiness = (myProfile != null && myProfile.getBusinessType() != null) ? myProfile.getBusinessType() : "Business";
@@ -102,6 +126,9 @@ public class ConversationServiceImpl implements ConversationService {
                             .status(ConversationStatus.ACTIVE)
                             .build();
                     log.info("Creating new conversation between buyer {} and seller {}", buyerId, sellerId);
+
+                    logAudit(currentUserId, AuditAction.CONVERSATION_STARTED, "Started conversation with: " + request.getCounterpartId());
+
                     return conversationRepository.save(created);
                 });
 
@@ -125,10 +152,10 @@ public class ConversationServiceImpl implements ConversationService {
     public ConversationResponse getConversationById(String conversationId) {
         String currentUserId = currentUserProvider.getCurrentUserId();
         Conversation conversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new IllegalArgumentException("Conversation not found: " + conversationId));
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
 
         if (!conversation.isParticipant(currentUserId)) {
-            throw new IllegalStateException("You are not a participant in this conversation");
+            throw new ForbiddenException("You are not a participant in this conversation");
         }
         return conversationMapper.toResponse(conversation, currentUserId);
     }
@@ -170,5 +197,23 @@ public class ConversationServiceImpl implements ConversationService {
 
     private String generateConversationCode() {
         return "CONV-" + Instant.now().toEpochMilli() + "-" + (int) (Math.random() * 9000 + 1000);
+    }
+
+    private void logAudit(String userId, AuditAction action, String details) {
+        HttpServletRequest request = getCurrentHttpRequest();
+        String ip = (request != null) ? ipAddressService.getClientIp(request) : "Unknown";
+        String userAgent = (request != null) ? request.getHeader(HttpHeaders.USER_AGENT) : "Unknown";
+        String deviceId = (request != null) ? (String) request.getAttribute("deviceId") : "Unknown";
+
+        auditService.log(AuditLogRequest.builder()
+                .userId(userId)
+                .action(action)
+                .resourceType(ResourceType.MESSAGE)
+                .ipAddress(ip)
+                .userAgent(userAgent)
+                .deviceId(deviceId)
+                .status(AuditLog.Status.SUCCESS)
+                .newValue(details)
+                .build());
     }
 }

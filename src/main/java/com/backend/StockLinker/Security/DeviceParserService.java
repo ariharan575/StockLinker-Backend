@@ -1,15 +1,9 @@
 package com.backend.StockLinker.Security;
 
-import nl.basjes.parse.useragent.UserAgent;
-import nl.basjes.parse.useragent.UserAgentAnalyzer;
 import org.springframework.stereotype.Service;
-
-import java.util.Optional;
 
 @Service
 public class DeviceParserService {
-
-    private final UserAgentAnalyzer analyzer;
 
     private static final DeviceDetails DEFAULT_DEVICE = new DeviceDetails(
             "Generic Device",
@@ -23,39 +17,78 @@ public class DeviceParserService {
             "Unknown"
     );
 
-    public DeviceParserService() {
-        this.analyzer = UserAgentAnalyzer.newBuilder()
-                .hideMatcherLoadStats()
-                .withCache(10000)
-                .build();
-    }
-
     public DeviceDetails parse(String userAgentString) {
         if (userAgentString == null || userAgentString.isBlank()) {
             return DEFAULT_DEVICE;
         }
 
-        UserAgent agent = analyzer.parse(userAgentString);
+        String os = parseOS(userAgentString);
+        String browser = parseBrowser(userAgentString);
+        String deviceType = parseDeviceType(userAgentString);
+        String architecture = parseArchitecture(userAgentString);
+        String manufacturer = parseManufacturer(userAgentString, os);
+
+        // Derive a generic model based on type if manufacturer is known
+        String model = deviceType.equals("Desktop") ? "PC" : "Mobile Device";
+        String deviceName = manufacturer.equals("Unknown") ? deviceType : manufacturer + " " + deviceType;
 
         return new DeviceDetails(
-                extractValue(agent, UserAgent.DEVICE_NAME, "Unknown Device"),
-                extractValue(agent, UserAgent.DEVICE_CLASS, "UNKNOWN"),
-                extractValue(agent, UserAgent.OPERATING_SYSTEM_NAME, "Unknown"),
-                extractValue(agent, UserAgent.OPERATING_SYSTEM_VERSION, "Unknown"),
-                extractValue(agent, UserAgent.AGENT_NAME, "Unknown"),
-                extractValue(agent, UserAgent.AGENT_VERSION, "Unknown"),
-                extractValue(agent, UserAgent.DEVICE_BRAND, "Unknown"),
-                extractValue(agent, UserAgent.DEVICE_NAME, "Unknown"),
-                extractValue(agent, "DeviceCpu", "Unknown") // YAUAA fallback for architecture
+                deviceName,
+                deviceType,
+                os,
+                "Unknown", // Deep OS versioning requires heavy regex, skipped to save RAM
+                browser,
+                "Unknown", // Deep Browser versioning requires heavy regex, skipped to save RAM
+                manufacturer,
+                model,
+                architecture
         );
     }
 
-    private String extractValue(UserAgent agent, String fieldName, String fallback) {
-        return Optional.ofNullable(agent.getValue(fieldName))
-                .filter(val -> !val.equalsIgnoreCase("Unknown"))
-                .orElse(fallback);
+    private String parseOS(String ua) {
+        if (ua.contains("Windows NT 10.0") || ua.contains("Windows NT 11.0")) return "Windows 10/11";
+        if (ua.contains("Windows NT")) return "Windows";
+        if (ua.contains("Mac OS X")) return "Mac OS";
+        if (ua.contains("Android")) return "Android";
+        if (ua.contains("iPhone") || ua.contains("iPad")) return "iOS";
+        if (ua.contains("Linux")) return "Linux";
+        return "Unknown OS";
     }
 
+    private String parseBrowser(String ua) {
+        // Order matters here since Edge/Opera also contain "Chrome" and "Safari" in their User-Agents
+        if (ua.contains("Edg/")) return "Edge";
+        if (ua.contains("OPR/") || ua.contains("Opera")) return "Opera";
+        if (ua.contains("Chrome/")) return "Chrome";
+        if (ua.contains("Firefox/")) return "Firefox";
+        if (ua.contains("Safari/") && !ua.contains("Chrome")) return "Safari";
+        return "Unknown Browser";
+    }
+
+    private String parseDeviceType(String ua) {
+        if (ua.contains("Mobi") || ua.contains("iPhone") || ua.contains("Android")) {
+            if (ua.contains("iPad") || (ua.contains("Android") && !ua.contains("Mobi"))) {
+                return "Tablet";
+            }
+            return "Mobile";
+        }
+        return "Desktop";
+    }
+
+    private String parseArchitecture(String ua) {
+        if (ua.contains("x64") || ua.contains("Win64") || ua.contains("x86_64")) return "x64";
+        if (ua.contains("arm64") || ua.contains("aarch64")) return "ARM64";
+        return "Unknown";
+    }
+
+    private String parseManufacturer(String ua, String os) {
+        if (os.equals("Mac OS") || os.equals("iOS")) return "Apple";
+        if (ua.contains("Samsung") || ua.contains("SM-")) return "Samsung";
+        if (ua.contains("Pixel")) return "Google";
+        return "Unknown";
+    }
+
+    // This record remains exactly the same so your DeviceSessionService does not break
     public record DeviceDetails(
             String deviceName,
             String deviceType,

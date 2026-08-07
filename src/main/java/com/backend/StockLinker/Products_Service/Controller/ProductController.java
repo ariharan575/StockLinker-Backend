@@ -3,6 +3,7 @@ package com.backend.StockLinker.Products_Service.Controller;
 import com.backend.StockLinker.Products_Service.Dto.SellerProductRequest;
 import com.backend.StockLinker.Products_Service.Dto.MasterProductSearchDto;
 import com.backend.StockLinker.Products_Service.Services.ProductService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -27,10 +28,11 @@ public class ProductController {
     @PostMapping("/seller/bulk")
     public ResponseEntity<Map<String, String>> saveBulkSellerProducts(
             @RequestBody @Valid List<SellerProductRequest> requests,
-            Authentication authentication) {
+            Authentication authentication,
+            HttpServletRequest request) {
 
         String userId = authentication.getName();
-        productService.saveBulkSellerProducts(requests, userId);
+        productService.saveBulkSellerProducts(requests, userId, request);
 
         return ResponseEntity.ok(Map.of(
                 "status", "success",

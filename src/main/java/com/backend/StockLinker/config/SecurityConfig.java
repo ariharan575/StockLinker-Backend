@@ -1,4 +1,4 @@
-package com.backend.StockLinker.Config;
+package com.backend.StockLinker.config;
 
 import com.backend.StockLinker.Security.DeviceFingerprintFilter;
 import com.backend.StockLinker.Security.JwtAuthenticationFilter;

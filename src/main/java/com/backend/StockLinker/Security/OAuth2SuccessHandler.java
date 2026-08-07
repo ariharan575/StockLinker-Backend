@@ -1,6 +1,7 @@
 package com.backend.StockLinker.Security;
 
 import com.backend.StockLinker.Auth_Service.dto.response.AuthResponse;
+import com.backend.StockLinker.Exception.customExceptions.BadRequestException;
 import com.backend.StockLinker.Exception.BaseException;
 import com.backend.StockLinker.Exception.ErrorCode;
 import com.backend.StockLinker.Auth_Service.service.AuthService;
@@ -40,20 +41,17 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
                 throw new BaseException(ErrorCode.OAUTH_FAILED, "OAuth2 user information is missing");
             }
 
-            // 🔥  Get deviceId from request attribute FIRST
             String deviceId = (String) request.getAttribute("deviceId");
 
             log.info("Saving deviceId into request = {}", deviceId);
 
-            // If still null, generate a new one
             if (deviceId == null || deviceId.isBlank()) {
                 log.debug("Generated fallback device ID: {}", deviceId);
-                throw new IllegalStateException("DeviceId missing");
+                throw new BadRequestException("DeviceId missing");
             }
 
             log.info("Processing OAuth2 login with deviceId: {}", deviceId);
 
-            // Process the Google login
             AuthResponse authResponse = authService.googleLogin(oauthUser, deviceId, request, response);
 
             String targetUrl = UriComponentsBuilder.fromUriString(oauthSuccessRedirectUrl)
@@ -67,7 +65,6 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
         } catch (Exception e) {
             log.error("OAuth2 authentication failed: {}", e.getMessage(), e);
 
-            // Redirect to error page
             String errorUrl = UriComponentsBuilder.fromUriString(oauthSuccessRedirectUrl)
                     .queryParam("error", "Authentication failed")
                     .queryParam("errorMessage", e.getMessage())

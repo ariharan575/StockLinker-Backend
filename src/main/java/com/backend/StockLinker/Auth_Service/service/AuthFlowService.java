@@ -8,6 +8,7 @@ import com.backend.StockLinker.Audit_Service.Enums.AuditAction;
 import com.backend.StockLinker.Audit_Service.Enums.ResourceType;
 import com.backend.StockLinker.Exception.BaseException;
 import com.backend.StockLinker.Exception.ErrorCode;
+import com.backend.StockLinker.Exception.customExceptions.ResourceNotFoundException;
 import com.backend.StockLinker.Audit_Service.Entity.AuditLog;
 import com.backend.StockLinker.Auth_Service.model.User;
 import com.backend.StockLinker.Auth_Service.model.UserDevice;
@@ -41,7 +42,7 @@ public class AuthFlowService {
         String userAgent = request.getHeader("User-Agent");
 
         User newUser = userRepository.findById(user.getId()).orElseThrow(()->
-                new BaseException(ErrorCode.USER_NOT_FOUND,"user not found"));
+                new ResourceNotFoundException("User not found"));
 
         if (newUser.getAccountStatus().equals(AccountStatus.BLOCKED)) {
             auditFailure(newUser.getId(), AuditAction.LOGIN_FAILED, "Account blocked/locked", ip, userAgent, deviceId);
@@ -64,7 +65,6 @@ public class AuthFlowService {
     }
 
     private AuthResponse buildResponse(User user) {
-        // Automatically maps to null if the user has no role yet (e.g., Guest or new OAuth)
         String roleName = user.getRole() != null ? user.getRole().getName() : null;
 
         return AuthResponse.builder()

@@ -1,7 +1,14 @@
 package com.backend.StockLinker.Profile_Service.service;
 
+import com.backend.StockLinker.Audit_Service.Dto.AuditLogRequest;
+import com.backend.StockLinker.Audit_Service.Entity.AuditLog;
+import com.backend.StockLinker.Audit_Service.Enums.AuditAction;
+import com.backend.StockLinker.Audit_Service.Enums.ResourceType;
+import com.backend.StockLinker.Audit_Service.Services.AuditService;
 import com.backend.StockLinker.Auth_Service.model.User;
 import com.backend.StockLinker.Auth_Service.repository.UserRepository;
+import com.backend.StockLinker.Auth_Service.service.IpAddressService;
+import com.backend.StockLinker.Exception.customExceptions.ResourceNotFoundException;
 import com.backend.StockLinker.ProductCatagory_Service.Entity.ProductSubCategory;
 import com.backend.StockLinker.ProductCatagory_Service.repository.ProductSubCategoryRepository;
 import com.backend.StockLinker.Profile_Service.Dto.ProfileDTO;
@@ -11,7 +18,9 @@ import com.backend.StockLinker.Profile_Service.repository.BusinessAddressReposit
 import com.backend.StockLinker.Profile_Service.repository.BusinessProfileRepository;
 import com.backend.StockLinker.Profile_Service.repository.DeliveryConfigurationRepository;
 import com.backend.StockLinker.Profile_Service.repository.SellerProductRepository;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,12 +40,20 @@ public class ProfileService {
     private final ProductSubCategoryRepository productSubCategoryRepository;
     private final SellerProductRepository sellerProductRepository;
 
+    // Injected for Audit Logging
+    private final AuditService auditService;
+    private final IpAddressService ipAddressService;
+
     @Transactional(readOnly = true)
     public FullProfileResponse getProfile(String userId) {
-        BusinessProfile profile = profileRepository.findByUserId(userId).orElseThrow(() -> new RuntimeException("Profile not found"));
+        BusinessProfile profile = profileRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Profile not found for user ID: " + userId));
+
         BusinessAddress address = addressRepository.findByBusinessProfileId(profile.getId()).orElse(new BusinessAddress());
         DeliveryConfiguration delivery = deliveryConfigRepository.findByBusinessProfileId(profile.getId()).orElse(new DeliveryConfiguration());
-        User userUniqueId = userRepository.findById(profile.getUserId()).orElseThrow();
+
+        User userUniqueId = userRepository.findById(profile.getUserId())
+                .orElseThrow(() -> new ResourceNotFoundException("User identity not found"));
 
         List<ProductSubCategory> subCats = new ArrayList<>();
         if (profile.getCategoryIds() != null && !profile.getCategoryIds().isEmpty()) {
@@ -96,17 +113,23 @@ public class ProfileService {
     }
 
     @Transactional
-    public void updateAccount(String userId, AccountUpdateRequest req) {
-        BusinessProfile profile = profileRepository.findByUserId(userId).orElseThrow();
+    public void updateAccount(String userId, AccountUpdateRequest req, HttpServletRequest request) {
+        BusinessProfile profile = profileRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Profile not found"));
+
         profile.setOwnerName(req.getOwnerName());
         profile.setMobileNumber(req.getMobileNumber());
         profile.setBusinessEmail(req.getBusinessEmail());
         profileRepository.save(profile);
+
+        logAudit(userId, AuditAction.PROFILE_UPDATED, "Account details updated", request);
     }
 
     @Transactional
-    public void updateBusiness(String userId, ProfileDTO.BusinessUpdateRequest req) {
-        BusinessProfile profile = profileRepository.findByUserId(userId).orElseThrow();
+    public void updateBusiness(String userId, ProfileDTO.BusinessUpdateRequest req, HttpServletRequest request) {
+        BusinessProfile profile = profileRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Profile not found"));
+
         if (req.getBusinessName() != null) profile.setBusinessName(req.getBusinessName());
         if (req.getBusinessType() != null) profile.setBusinessType(req.getBusinessType());
         if (req.getGstNumber() != null) profile.setGstNumber(req.getGstNumber());
@@ -116,11 +139,15 @@ public class ProfileService {
         if (req.getAlternateMobileNumber() != null) profile.setAlternateMobileNumber(req.getAlternateMobileNumber());
         if (req.getBusinessDescription() != null) profile.setBusinessDescription(req.getBusinessDescription());
         profileRepository.save(profile);
+
+        logAudit(userId, AuditAction.BUSINESS_UPDATED, "Business corporate details updated", request);
     }
 
     @Transactional
-    public void updateStore(String userId, StoreUpdateRequest req) {
-        BusinessProfile profile = profileRepository.findByUserId(userId).orElseThrow();
+    public void updateStore(String userId, StoreUpdateRequest req, HttpServletRequest request) {
+        BusinessProfile profile = profileRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Profile not found"));
+
         BusinessAddress address = addressRepository.findByBusinessProfileId(profile.getId()).orElse(new BusinessAddress());
         address.setBusinessProfile(profile);
         address.setAddress(req.getAddressLine1());
@@ -131,11 +158,14 @@ public class ProfileService {
         address.setPincode(req.getPincode());
         address.setLandmark(req.getLandmark());
         addressRepository.save(address);
+
+        logAudit(userId, AuditAction.STORE_UPDATED, "Store address/location updated", request);
     }
 
     @Transactional
-    public void updateDeliveryAndInsights(String userId, DeliveryInsightsUpdateRequest req) {
-        BusinessProfile profile = profileRepository.findByUserId(userId).orElseThrow();
+    public void updateDeliveryAndInsights(String userId, DeliveryInsightsUpdateRequest req, HttpServletRequest request) {
+        BusinessProfile profile = profileRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Profile not found"));
 
         // Save Editable Insights
         profile.setBestSellingProduct(req.getBestSellingProduct());
@@ -151,5 +181,25 @@ public class ProfileService {
         delivery.setOperatingDays(req.getOperatingDays());
         delivery.setRouteSchedule(req.getRouteSchedule());
         deliveryConfigRepository.save(delivery);
+
+        logAudit(userId, AuditAction.DELIVERY_INSIGHTS_UPDATED, "Delivery configuration and product insights updated", request);
+    }
+
+    // Helper method for standardized audit logging
+    private void logAudit(String userId, AuditAction action, String details, HttpServletRequest request) {
+        String ip = (request != null) ? ipAddressService.getClientIp(request) : "Unknown";
+        String userAgent = (request != null) ? request.getHeader(HttpHeaders.USER_AGENT) : "Unknown";
+        String deviceId = (request != null) ? (String) request.getAttribute("deviceId") : "Unknown";
+
+        auditService.log(AuditLogRequest.builder()
+                .userId(userId)
+                .action(action)
+                .resourceType(ResourceType.PROFILE)
+                .ipAddress(ip)
+                .userAgent(userAgent)
+                .deviceId(deviceId)
+                .status(AuditLog.Status.SUCCESS)
+                .newValue(details)
+                .build());
     }
 }

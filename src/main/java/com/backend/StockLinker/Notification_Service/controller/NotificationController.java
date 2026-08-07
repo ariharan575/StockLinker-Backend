@@ -1,6 +1,7 @@
 package com.backend.StockLinker.Notification_Service.controller;
 
 import com.backend.StockLinker.Notification_Service.service.NotificationService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -21,14 +22,14 @@ public class NotificationController {
     }
 
     @PutMapping("/{id}/read")
-    public ResponseEntity<Void> markAsRead(@PathVariable String id, Authentication auth) {
-        notificationService.markAsRead(id, auth.getName());
+    public ResponseEntity<Void> markAsRead(@PathVariable String id, Authentication auth, HttpServletRequest request) {
+        notificationService.markAsRead(id, auth.getName(), request);
         return ResponseEntity.ok().build();
     }
 
     @PutMapping("/read-all")
-    public ResponseEntity<Void> markAllAsRead(Authentication auth) {
-        notificationService.markAllAsRead(auth.getName());
+    public ResponseEntity<Void> markAllAsRead(Authentication auth, HttpServletRequest request) {
+        notificationService.markAllAsRead(auth.getName(), request);
         return ResponseEntity.ok().build();
     }
 }

@@ -4,8 +4,7 @@ import com.backend.StockLinker.Audit_Service.Services.AuditService;
 import com.backend.StockLinker.Audit_Service.Dto.AuditLogRequest;
 import com.backend.StockLinker.Audit_Service.Enums.AuditAction;
 import com.backend.StockLinker.Audit_Service.Enums.ResourceType;
-import com.backend.StockLinker.Exception.BaseException;
-import com.backend.StockLinker.Exception.ErrorCode;
+import com.backend.StockLinker.Exception.customExceptions.BadRequestException;
 import com.backend.StockLinker.Security.DeviceParserService;
 import com.backend.StockLinker.Audit_Service.Entity.AuditLog;
 import com.backend.StockLinker.Auth_Service.model.User;
@@ -44,15 +43,13 @@ public class DeviceSessionService {
     public UserDevice getOrCreate(User user, String deviceId, HttpServletRequest request) {
 
         if (user == null || user.getId() == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "User information is required for device registration");
+            throw new BadRequestException("User information is required for device registration");
         }
 
         if (deviceId == null || deviceId.isBlank()) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Device ID is required for device registration");
+            throw new BadRequestException("Device ID is required for device registration");
         }
 
-        // Enterprise flow: Simply find the session for THIS user and THIS device, or create a new one.
-        // No reassignment. No deleting other users' sessions.
         UserDevice device = userDeviceRepository
                 .findByUserIdAndDeviceId(user.getId(), deviceId)
                 .map(existing -> updateExistingDevice(existing, request, user.getId()))
