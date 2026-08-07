@@ -4,13 +4,19 @@ import com.google.auth.oauth2.GoogleCredentials;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
 import com.google.firebase.auth.FirebaseAuth;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.util.Base64;
 
 @Configuration
 public class FirebaseConfig {
+
+    @Value("${firebase.service.account}")
+    private String firebaseServiceAccountBase64;
 
     @Bean
     public FirebaseApp firebaseApp() {
@@ -20,21 +26,22 @@ public class FirebaseConfig {
                 return FirebaseApp.getInstance();
             }
 
-            // 2. Load Service Account
-            InputStream serviceAccount = getClass().getClassLoader()
-                    .getResourceAsStream("firebase-service-account.json");
-
-            if (serviceAccount == null) {
-                throw new RuntimeException("firebase-service-account.json not found in src/main/resources!");
+            // 2. Validate configuration existence
+            if (firebaseServiceAccountBase64 == null || firebaseServiceAccountBase64.isBlank()) {
+                throw new RuntimeException("Firebase credentials not found in environment variables!");
             }
 
-            // 3. Initialize App
+            // 3. Decode the Base64 string back into a JSON InputStream in memory
+            byte[] decodedBytes = Base64.getDecoder().decode(firebaseServiceAccountBase64);
+            InputStream serviceAccount = new ByteArrayInputStream(decodedBytes);
+
+            // 4. Initialize App
             FirebaseOptions options = FirebaseOptions.builder()
                     .setCredentials(GoogleCredentials.fromStream(serviceAccount))
                     .build();
 
             FirebaseApp app = FirebaseApp.initializeApp(options);
-            System.out.println("Firebase Initialized Successfully");
+            System.out.println("Firebase Initialized Successfully via Secure Environment Variable");
             return app;
 
         } catch (Exception e) {
@@ -49,68 +56,3 @@ public class FirebaseConfig {
     }
 }
 
-
-//package com.backend.StockLinker.Config;
-//
-//import com.google.auth.oauth2.GoogleCredentials;
-//import com.google.firebase.FirebaseApp;
-//import com.google.firebase.FirebaseOptions;
-//import jakarta.annotation.PostConstruct;
-//import org.springframework.context.annotation.Configuration;
-//
-//import java.io.ByteArrayInputStream;
-//import java.io.InputStream;
-//import java.nio.charset.StandardCharsets;
-//
-//@Configuration
-//public class FirebaseConfig {
-//
-//    @PostConstruct
-//    public void init() {
-//        try {
-//
-//            InputStream serviceAccount;
-//
-//            // First preference: Environment Variable
-//            String firebaseJson = System.getenv("FIREBASE_SERVICE_ACCOUNT");
-//
-//            if (firebaseJson != null && !firebaseJson.isBlank()) {
-//
-//                serviceAccount = new ByteArrayInputStream(
-//                        firebaseJson.getBytes(StandardCharsets.UTF_8)
-//                );
-//
-//                System.out.println("Using Firebase credentials from Environment Variable.");
-//
-//            } else {
-//
-//                // Fallback: Local JSON file
-//                serviceAccount = getClass()
-//                        .getClassLoader()
-//                        .getResourceAsStream("firebase-service-account.json");
-//
-//                if (serviceAccount == null) {
-//                    throw new RuntimeException(
-//                            "Firebase credentials not found. " +
-//                                    "Neither FIREBASE_SERVICE_ACCOUNT environment variable nor firebase-service-account.json.json exists."
-//                    );
-//                }
-//
-//                System.out.println("Using Firebase credentials from firebase-service-account.json.json.");
-//            }
-//
-//            FirebaseOptions options = FirebaseOptions.builder()
-//                    .setCredentials(GoogleCredentials.fromStream(serviceAccount))
-//                    .build();
-//
-//            if (FirebaseApp.getApps().isEmpty()) {
-//                FirebaseApp.initializeApp(options);
-//            }
-//
-//            System.out.println("Firebase Initialized Successfully");
-//
-//        } catch (Exception e) {
-//            throw new RuntimeException("Firebase initialization failed", e);
-//        }
-//    }
-//}
