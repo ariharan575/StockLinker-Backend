@@ -6,9 +6,8 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.annotation.Order;
-import org.springframework.core.env.Environment;
-import org.springframework.core.env.Profiles;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.stereotype.Component;
@@ -26,11 +25,11 @@ public class DeviceFingerprintFilter extends OncePerRequestFilter {
     public static final String DEVICE_COOKIE_NAME = "deviceId";
     public static final String DEVICE_HEADER_NAME = "X-Device-Id";
 
-    private final boolean isProduction;
+    @Value("${security.cookie.secure}")
+    private boolean secure;
 
-    public DeviceFingerprintFilter(Environment env) {
-        this.isProduction = env.acceptsProfiles(Profiles.of("prod", "production"));
-    }
+    @Value("${security.cookie.domain}")
+    private String domain;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -107,10 +106,11 @@ public class DeviceFingerprintFilter extends OncePerRequestFilter {
     private void setSecureCookie(HttpServletResponse response, String deviceId) {
         ResponseCookie cookie = ResponseCookie.from(DEVICE_COOKIE_NAME, deviceId)
                 .httpOnly(true)
-                .secure(isProduction)
+                .secure(secure)
                 .path("/")
                 .maxAge(Duration.ofDays(365))
-                .sameSite("Lax")
+                .domain(domain.equals("localhost") ? null : domain)
+                .sameSite("None")
                 .build();
 
         response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
