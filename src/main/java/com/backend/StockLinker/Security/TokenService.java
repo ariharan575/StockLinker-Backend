@@ -84,7 +84,7 @@ public class TokenService {
                 .path("/")
                 .maxAge(Duration.ofMinutes(15))
                 .domain(domain.equals("localhost") ? null : domain)
-                .sameSite("Lax")
+                .sameSite("None")
                 .build();
         res.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
     }
@@ -97,7 +97,7 @@ public class TokenService {
                 .path("/api/auth")
                 .maxAge(Duration.ofDays(7))
                 .domain(domain.equals("localhost") ? null : domain)
-                .sameSite("Lax")
+                .sameSite("None")
                 .build();
         res.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
     }
@@ -109,7 +109,7 @@ public class TokenService {
                 .path(path)
                 .maxAge(0)
                 .domain(domain.equals("localhost") ? null : domain)
-                .sameSite("Lax")
+                .sameSite("None")
                 .build();
         res.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
     }
